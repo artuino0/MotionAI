@@ -133,21 +133,22 @@ Pocas herramientas y bien acotadas, como hace pen.dev. Claude no puede escribir 
 
 | Herramienta | Qué hace | Entrada principal |
 | --- | --- | --- |
-| `leer_estado` | Proyecto abierto, escena y tiempo actuales, selección y referencias del mensaje | — |
-| `leer_skill` | Cómo trabajar en la app, guía de motion y, si hay kit, las reglas de la marca | tema |
-| `leer_proyecto` | Ajustes, escenas, frases y piezas con su animación | — |
+| `leer_estado` | Proyecto abierto, versión, escenas; tiempo, selección y referencias del mensaje cuando la app está conectada | — |
+| `leer_skill` | Cómo trabajar en la app, guía de motion, formato del documento, fuentes y, si hay kit, las reglas de la marca | tema |
+| `leer_proyecto` | Ajustes, escenas, frases y piezas con su animación (resumen, JSON o una pieza) | detalle, id |
+| `nuevo_proyecto` / `abrir_proyecto` | Proyecto vacío con formato y duración, o uno existente | nombre, formato / ruta |
 | `ajustes_proyecto` | Cambia formato, fps, audio, subtítulos o exportación | ajustes |
-| `crear_pieza` | Crea una pieza desde cero con primitivas vectoriales; opcionalmente la guarda como componente | árbol de nodos, nombre |
-| `buscar_biblioteca` | Componentes y piezas procedurales disponibles por nombre o tipo | texto, tipo |
-| `importar` | Trae piezas de un SVG o un `.pen` a la biblioteca | archivo |
-| `agregar_pieza` | Pone un componente o pieza procedural en una escena, con su animación | componente, escena, posición, animación |
-| `cambiar` | Lote de cambios a piezas: posición, escala, texto, color, keyframes, tiempos | lista de cambios por id |
-| `quitar_pieza` | Saca una pieza de la escena | id |
-| `escenas` | Crear, partir, unir o mover cortes de escena | operación, tiempos |
-| `voz` | Carga el audio, detecta frases y tiempos, decide cuáles no llevan subtítulo | archivo, opciones |
-| `ver_cuadro` | Imagen del cuadro renderizado, para que Claude revise su trabajo | escena, segundo |
-| `nuevo_proyecto` | Proyecto vacío con formato, estilo y kit opcional | nombre, formato |
+| `crear_pieza` | Diseña un componente con primitivas vectoriales y lo guarda en la biblioteca | árbol de nodos, nombre |
+| `agregar_pieza` | Pone una primitiva, un grupo o una instancia de un componente en una escena, con su animación | escena, pieza |
+| `cambiar` | Lote de cambios a piezas, escenas o componentes: posición, escala, texto, color, keyframes, tiempos, capa | lista de cambios por id |
+| `quitar_pieza` | Saca piezas o componentes sin usar | ids |
+| `buscar_biblioteca` | Componentes disponibles por nombre o tipo | texto, tipo |
+| `escenas` | Crear, quitar, partir o mover cortes de escena | operación, tiempos |
+| `voz` | Carga voz o música, detecta los tramos con habla y pone las frases | archivo, frases |
+| `ver_cuadro` | Imagen de 1 a 6 cuadros, para que Claude revise su trabajo | segundos |
 | `exportar` | Manda a hacer el MP4 final y avisa cuando termina | opciones |
+| `versiones` | Lista el historial o vuelve a una versión | operación, versión |
+| `importar` (fase 4) | Trae piezas de un SVG o un `.pen` a la biblioteca | archivo |
 
 Cada herramienta responde qué cambió y en qué versión quedó. Si un cambio rompe una regla (por ejemplo, un texto en la zona de botones de TikTok), se rechaza con el motivo y Claude lo corrige.
 

@@ -1,0 +1,13 @@
+{
+  "name": "@motionai/estudio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@motionai/documento": "workspace:*",
+    "@motionai/motor": "workspace:*",
+    "@motionai/render": "workspace:*",
+    "skia-canvas": "^3.0.0"
+  }
+}

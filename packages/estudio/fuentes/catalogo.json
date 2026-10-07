@@ -1,0 +1,16 @@
+[
+  { "familia": "Nunito", "estilo": "Redonda y amigable; buena para todo, desde titulares hasta subtítulos",
+    "pesos": { "400": "Nunito_400Regular.ttf", "700": "Nunito_700Bold.ttf", "900": "Nunito_900Black.ttf" } },
+  { "familia": "Montserrat", "estilo": "Geométrica y firme; titulares de negocio y tecnología",
+    "pesos": { "400": "Montserrat_400Regular.ttf", "700": "Montserrat_700Bold.ttf", "900": "Montserrat_900Black.ttf" } },
+  { "familia": "Poppins", "estilo": "Geométrica moderna, más suave que Montserrat; interfaces y listas",
+    "pesos": { "400": "Poppins_400Regular.ttf", "600": "Poppins_600SemiBold.ttf", "800": "Poppins_800ExtraBold.ttf" } },
+  { "familia": "Bebas Neue", "estilo": "Condensada, solo mayúsculas; titulares grandes y de impacto",
+    "pesos": { "400": "BebasNeue_400Regular.ttf" } },
+  { "familia": "Playfair Display", "estilo": "Serif elegante de alto contraste; moda, comida, lujo",
+    "pesos": { "400": "PlayfairDisplay_400Regular.ttf", "700": "PlayfairDisplay_700Bold.ttf", "900": "PlayfairDisplay_900Black.ttf" } },
+  { "familia": "Caveat", "estilo": "Escrita a mano; notas, acentos y toques cercanos (no para textos largos)",
+    "pesos": { "400": "Caveat_400Regular.ttf", "700": "Caveat_700Bold.ttf" } },
+  { "familia": "Space Grotesk", "estilo": "Grotesca con carácter técnico; datos, cifras y tecnología",
+    "pesos": { "400": "SpaceGrotesk_400Regular.ttf", "700": "SpaceGrotesk_700Bold.ttf" } }
+]

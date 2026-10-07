@@ -106,7 +106,7 @@ export const ProyectoEsquema = z
     escenas: z.array(EscenaEsquema).min(1),
   })
   .superRefine((p, ctx) => {
-    // Ids únicos en todo el documento: Claude y la interfaz se refieren a las piezas por id.
+    // Ids únicos en todo el documento (escenas y biblioteca): Claude y la interfaz se refieren a las piezas por id.
     const vistos = new Set<string>();
     const unico = (id: string, path: (string | number)[]) => {
       if (vistos.has(id)) ctx.addIssue({ code: 'custom', path, message: `El id "${id}" está repetido` });
@@ -115,6 +115,9 @@ export const ProyectoEsquema = z
     p.escenas.forEach((e, i) => {
       unico(e.id, ['escenas', i, 'id']);
       for (const h of e.hijos) for (const n of recorrer(h)) unico(n.id, ['escenas', i]);
+    });
+    p.biblioteca.forEach((c, i) => {
+      for (const n of recorrer(c.raiz)) unico(n.id, ['biblioteca', i]);
     });
     const componentes = new Set<string>();
     p.biblioteca.forEach((c, i) => {

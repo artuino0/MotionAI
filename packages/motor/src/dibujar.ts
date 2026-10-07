@@ -15,8 +15,29 @@ export interface Entorno {
   imagen(archivo: string): CanvasImageSource | null | undefined;
 }
 
+/** Dónde quedó una pieza en un cuadro. Sirve para validar reglas y para seleccionar con clic. */
+export interface Registro {
+  /** Id de la pieza. Dentro de una instancia: `idInstancia/idPieza`. */
+  ruta: string;
+  nodo: Nodo;
+  /** Caja en pixeles del lienzo (ya con rotación y escala). */
+  caja: Caja;
+  /** Escala total de la pieza en el lienzo (raíz del determinante de la transformación). */
+  escala: number;
+  /** `true` si ni la pieza ni sus contenedores están entrando o saliendo. */
+  reposo: boolean;
+}
+
 export interface OpcionesCuadro {
   subtitulos?: boolean;
+  /** Se llama por cada pieza dibujada, en orden de abajo hacia arriba. */
+  registrar?: (r: Registro) => void;
+}
+
+interface Rastro {
+  registrar?: (r: Registro) => void;
+  prefijo: string;
+  reposo: boolean;
 }
 
 /** Escena que se ve en el segundo `t`. */
@@ -46,13 +67,14 @@ export function dibujarCuadro(ctx: Ctx, esc: Escenario, t: number, entorno: Ento
 
   if (escena) {
     const m: Medio = { contenedor: lienzo, lienzo };
-    for (const np of escena.hijos) dibujarNodo(ctx, np, t, m, entorno);
+    const r: Rastro = { registrar: op.registrar, prefijo: '', reposo: true };
+    for (const np of escena.hijos) dibujarNodo(ctx, np, t, m, entorno, r);
   }
   if (op.subtitulos !== false) dibujarSubtitulos(ctx, esc, t);
   ctx.restore();
 }
 
-function dibujarNodo(ctx: Ctx, np: NodoPreparado, t: number, m: Medio, entorno: Entorno): void {
+function dibujarNodo(ctx: Ctx, np: NodoPreparado, t: number, m: Medio, entorno: Entorno, r: Rastro): void {
   const s = estado(np, t, m);
   if (!s.visible || s.opacidad <= 0 || s.escalaX === 0 || s.escalaY === 0) return;
   const n = np.nodo;
@@ -65,6 +87,9 @@ function dibujarNodo(ctx: Ctx, np: NodoPreparado, t: number, m: Medio, entorno: 
   if (s.escalaX !== 1 || s.escalaY !== 1) ctx.scale(s.escalaX, s.escalaY);
   ctx.translate(-ax, -ay);
   ctx.globalAlpha *= s.opacidad;
+  const reposo = r.reposo && enReposo(np, t);
+  const ruta = r.prefijo + n.id;
+  if (r.registrar) r.registrar({ ruta, nodo: n, ...cajaEnLienzo(ctx.getTransform(), caja), reposo });
   if (n.sombra) {
     ctx.shadowColor = colorCss(leerColor(n.sombra.color));
     ctx.shadowBlur = n.sombra.desenfoque ?? 0;
@@ -112,14 +137,32 @@ function dibujarNodo(ctx: Ctx, np: NodoPreparado, t: number, m: Medio, entorno: 
         ctx.clip();
       }
       const mh: Medio = { contenedor: cont, lienzo: m.lienzo };
-      for (const h of np.hijos) dibujarNodo(ctx, h, t, mh, entorno);
+      for (const h of np.hijos) dibujarNodo(ctx, h, t, mh, entorno, { ...r, reposo });
       break;
     }
     case 'instancia':
-      for (const h of np.hijos) dibujarNodo(ctx, h, t, m, entorno);
+      for (const h of np.hijos) dibujarNodo(ctx, h, t, m, entorno, { ...r, reposo, prefijo: `${ruta}/` });
       break;
   }
   ctx.restore();
+}
+
+function enReposo(np: NodoPreparado, t: number): boolean {
+  if (np.entra && t < np.entra.en + np.entra.dur) return false;
+  if (np.sale && t >= np.sale.en) return false;
+  return true;
+}
+
+function cajaEnLienzo(mt: DOMMatrix, c: Caja): { caja: Caja; escala: number } {
+  const pts = [[c[0], c[1]], [c[2], c[1]], [c[2], c[3]], [c[0], c[3]]].map(([x, y]) => [
+    mt.a * x! + mt.c * y! + mt.e,
+    mt.b * x! + mt.d * y! + mt.f,
+  ]);
+  const xs = pts.map((p) => p[0]!), ys = pts.map((p) => p[1]!);
+  return {
+    caja: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+    escala: Math.sqrt(Math.abs(mt.a * mt.d - mt.b * mt.c)),
+  };
 }
 
 function contenedorDeGrupo(n: Extract<Nodo, { tipo: 'grupo' }>, m: Medio) {

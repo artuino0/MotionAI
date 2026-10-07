@@ -8,10 +8,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "visor": "pnpm --filter @motionai/visor dev",
     "motionai": "tsx packages/render/src/cli.ts",
-    "paridad": "tsx herramientas/paridad.ts"
+    "paridad": "tsx herramientas/paridad.ts",
+    "fase2": "tsx herramientas/prueba-fase2.ts",
+    "mcp": "node --disable-warning=ExperimentalWarning --import tsx packages/mcp/src/servidor.ts"
   },
   "devDependencies": {
     "@motionai/documento": "workspace:*",
+    "@motionai/estudio": "workspace:*",
+    "@motionai/mcp": "workspace:*",
     "@motionai/motor": "workspace:*",
     "@motionai/render": "workspace:*",
     "@types/node": "^22.0.0",

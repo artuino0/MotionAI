@@ -4,10 +4,13 @@ App de escritorio para hacer motion graphics pidiéndoselos a Claude en un chat.
 
 - [Plan del producto](docs/PLAN.md): ese plan, el esquema del documento y el contrato de las herramientas son la fuente de la verdad.
 - [El documento](docs/documento.md): formato de los proyectos.
+- [Servidor MCP](docs/mcp.md): herramientas, reglas y cómo conectarlo a Claude.
 
 ## Estado
 
-Fase 1 (motor y documento) lista: esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node y un visor en el navegador. Siguiente: fase 2, herramientas MCP.
+- Fase 1 (motor y documento) lista: esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node y un visor en el navegador.
+- Fase 2 (herramientas MCP) lista: servidor MCP con 16 herramientas, validadores de reglas, historial de versiones en SQLite, catálogo de fuentes libres y el puente que lanza Claude Code solo con las herramientas de la app.
+- Siguiente: fase 3, la app de escritorio.
 
 ## Paquetes
 
@@ -17,6 +20,8 @@ Fase 1 (motor y documento) lista: esquema del documento con ajustes de proyecto,
 | `packages/motor` | Motor de render sobre Canvas 2D; corre igual en el navegador y en Node |
 | `packages/render` | Render en Node con skia-canvas, exportación a MP4 con ffmpeg y la línea de comandos |
 | `packages/visor` | Visor web para reproducir un proyecto (Vite) |
+| `packages/estudio` | Proyecto abierto: aplica cambios validados, reglas de redes, versiones, fuentes, vistas y voz |
+| `packages/mcp` | Servidor MCP por stdio, guías para Claude y el lanzador de Claude Code |
 
 ## Requisitos
 
@@ -37,6 +42,8 @@ pnpm visor        # abre http://localhost:5173/?proyecto=/ejemplos/demo/proyecto
 pnpm test         # pruebas unitarias
 pnpm typecheck
 pnpm paridad      # prueba de cierre de la fase 1: navegador vs Node vs MP4, en 9:16 y 16:9
+pnpm mcp --carpeta proyectos   # servidor MCP por stdio (ver docs/mcp.md)
+pnpm fase2 ["brief"]           # prueba de cierre de la fase 2: Claude hace un video desde un brief
 ```
 
 `pnpm paridad` necesita Chromium: usa `/opt/pw-browsers/chromium` si existe, la variable `CHROMIUM`, o el que instala `pnpm exec playwright-core install chromium`. Deja el reporte y las imágenes de diferencias en `salida/paridad/`.
