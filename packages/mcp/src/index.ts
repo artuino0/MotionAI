@@ -6,7 +6,7 @@ import { puertoRemoto } from './rpc.js';
 export { registrarHerramientas, INSTRUCCIONES } from './herramientas.js';
 export * from './puerto.js';
 export { servirPuerto, puertoRemoto, rutaSocket } from './rpc.js';
-export { lanzarAgente, argumentosClaude, configuracionMcp, leerRenglon, revisarClaude, ESFUERZOS, type Esfuerzo, type EventoAgente, type OpcionesAgente, type EstadoClaude } from './agente.js';
+export { lanzarAgente, argumentosClaude, configuracionMcp, leerRenglon, revisarClaude, resolverClaude, ESFUERZOS, type Esfuerzo, type EventoAgente, type OpcionesAgente, type EstadoClaude } from './agente.js';
 
 /**
  * Servidor MCP. Con `socket`, cada herramienta se atiende en la app abierta; si no, el servidor

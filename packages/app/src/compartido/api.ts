@@ -72,6 +72,8 @@ export interface NuevoProyecto {
 
 export interface ApiMotionAI {
   revisarClaude(): Promise<EstadoClaude>;
+  /** El usuario señala dónde está Claude Code; null si cancela. */
+  elegirClaude(): Promise<EstadoClaude | null>;
   recientes(): Promise<Reciente[]>;
   nuevoProyecto(op: NuevoProyecto): Promise<ProyectoAbierto>;
   /** Sin ruta muestra el diálogo para elegir un proyecto.json. */

@@ -21,6 +21,10 @@ onMounted(async () => (recientes.value = await window.motionai.recientes()));
 const listo = computed(() => !!(e.claude?.instalado && e.claude.sesionIniciada));
 const motivo = computed(() => (!listo.value ? t('inicio.nuevo.faltaClaude') : !nuevo.value.nombre.trim() ? t('inicio.nuevo.faltaNombre') : ''));
 
+async function elegir() {
+  const r = await window.motionai.elegirClaude();
+  if (r) e.claude = r;
+}
 async function revisar() {
   revisando.value = true;
   e.claude = await window.motionai.revisarClaude();
@@ -71,6 +75,11 @@ async function abrir(ruta?: string) {
         <strong>{{ t('inicio.claude.falta') }}</strong>
         <ol><li v-for="p in e.claude.pasos" :key="p">{{ p }}</li></ol>
         <button :disabled="revisando" @click="revisar">{{ revisando ? t('inicio.claude.revisandoBoton') : t('inicio.claude.revisar') }}</button>
+        <button v-if="!e.claude.instalado" class="fantasma" @click="elegir">{{ t('inicio.claude.elegir') }}</button>
+        <details v-if="e.claude.detalle" class="detalle">
+          <summary>{{ t('inicio.claude.detalle') }}</summary>
+          <pre>{{ e.claude.detalle }}</pre>
+        </details>
       </div>
     </section>
 
@@ -150,6 +159,8 @@ header p { margin: 4px 0 0; font-size: 15px; }
 h2 { font-size: 16px; margin: 0; }
 .claude { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); padding: 14px 16px; }
 .estado { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #edb43e26; color: var(--amarillo); flex: none; }
+.detalle { margin-top: 8px; }
+.detalle pre { white-space: pre-wrap; word-break: break-all; font-size: 11.5px; user-select: text; max-height: 180px; overflow: auto; background: var(--panel-2); padding: 8px; border-radius: var(--radio-chico); }
 .claude.ok .estado { background: #4fcb8d26; color: var(--verde); }
 .texto { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding-top: 3px; }
 .texto ol { margin: 4px 0 6px; padding-left: 20px; line-height: 1.6; }

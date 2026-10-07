@@ -10,6 +10,7 @@ const escuchar = (canal: string) => (f: (x: any) => void) => {
 
 const api: ApiMotionAI = {
   revisarClaude: () => ipcRenderer.invoke('claude:revisar'),
+  elegirClaude: () => ipcRenderer.invoke('claude:elegir'),
   recientes: () => ipcRenderer.invoke('recientes'),
   nuevoProyecto: (op) => ipcRenderer.invoke('proyecto:nuevo', op),
   abrirProyecto: (ruta) => ipcRenderer.invoke('proyecto:abrir', ruta),

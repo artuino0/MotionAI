@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from 'electron';
@@ -28,15 +28,18 @@ process.env.MOTIONAI_RECURSOS ??= path.join(DIST, 'recursos');
   const ffmpeg = path.join(DIST, 'recursos', 'ffmpeg');
   if (existsSync(ffmpeg)) process.env.PATH = `${ffmpeg}${path.delimiter}${process.env.PATH ?? ''}`;
 }
-/** Claude Code: MOTIONAI_CLAUDE, o en Windows donde lo deja su instalador si no está en el PATH. */
+/**
+ * Claude Code que eligió el usuario (o MOTIONAI_CLAUDE). Sin elección, resolverClaude lo busca en el PATH y donde lo
+ * dejan sus instaladores.
+ */
 function rutaClaude(): string | undefined {
   if (process.env.MOTIONAI_CLAUDE) return process.env.MOTIONAI_CLAUDE;
-  if (process.platform !== 'win32') return undefined;
-  const candidatos = [
-    path.join(process.env.USERPROFILE ?? '', '.local', 'bin', 'claude.exe'),
-    path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'claude', 'claude.exe'),
-  ];
-  return candidatos.find((c) => existsSync(c));
+  try {
+    const r = (JSON.parse(readFileSync(path.join(app.getPath('userData'), 'claude.json'), 'utf8')) as { ruta?: string }).ruta;
+    return r && existsSync(r) ? r : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // proyecto://local/<ruta> sirve archivos de la carpeta del proyecto abierto (fuentes, imágenes, audio).
@@ -115,6 +118,17 @@ function carpetaLibre(nombre: string): string {
 
 function registrarIpc() {
   ipcMain.handle('claude:revisar', () => revisarClaude(rutaClaude()));
+  // Si no lo encuentra solo, el usuario puede señalar dónde está claude (claude.exe o claude.cmd en Windows).
+  ipcMain.handle('claude:elegir', async () => {
+    const r = await dialog.showOpenDialog(ventana!, {
+      title: idioma === 'en' ? 'Where is Claude Code?' : '¿Dónde está Claude Code?',
+      properties: ['openFile'],
+      ...(process.platform === 'win32' ? { filters: [{ name: 'Claude Code', extensions: ['exe', 'cmd'] }] } : {}),
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    writeFileSync(path.join(app.getPath('userData'), 'claude.json'), JSON.stringify({ ruta: r.filePaths[0] }));
+    return revisarClaude(r.filePaths[0]);
+  });
   ipcMain.handle('recientes', () => recientes().listar());
   ipcMain.handle('proyecto:nuevo', async (_e, op: NuevoProyecto) =>
     usar(await Estudio.crear({

@@ -4,6 +4,7 @@
  * así un cambio entre versiones de Claude Code se arregla aquí.
  */
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -146,9 +147,11 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
     MCP_TOOL_TIMEOUT: resto.MCP_TOOL_TIMEOUT ?? String(TIEMPO_HERRAMIENTA_MS),
     CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT: resto.CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT ?? String(TIEMPO_HERRAMIENTA_MS),
   };
-  const hijo = spawn(op.claude ?? 'claude', argumentosClaude(op, rutaConfig), {
+  const cmd = resolverClaude(op.claude);
+  const hijo = spawn(cmd.comando, [...cmd.prefijo, ...argumentosClaude(op, rutaConfig)], {
     cwd,
-    env,
+    env: { ...env, ...cmd.env },
+    windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     ...(op.senal ? { signal: op.senal } : {}),
   });
@@ -169,7 +172,7 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
   const codigo = await new Promise<number>((ok, mal) => {
     hijo.on('error', (e) => {
       if (op.senal?.aborted) ok(130);
-      else mal(new Error(`No se pudo lanzar Claude Code (${op.claude ?? 'claude'}): ${e.message}`));
+      else mal(new Error(`No se pudo lanzar Claude Code (${cmd.comando}): ${e.message}`));
     });
     hijo.on('close', (c) => ok(c ?? 130));
   });
@@ -184,23 +187,80 @@ export interface EstadoClaude {
   sesionIniciada: boolean;
   /** Qué hacer si falta algo. */
   pasos?: string[];
+  /** Ejecutable que se usó (o se intentó). */
+  ruta?: string;
+  /** Detalle técnico si algo falló: dónde se buscó y qué contestó. */
+  detalle?: string;
+}
+
+/** Cómo lanzar Claude Code: el ejecutable y, si es el de npm, el script que corre con Node. */
+export interface ComandoClaude {
+  comando: string;
+  prefijo: string[];
+  env?: Record<string, string>;
+  /** Lugares donde se buscó, para el diagnóstico. */
+  buscado: string[];
+}
+
+/**
+ * Encuentra Claude Code. Una app abierta desde el escritorio no siempre hereda el PATH de la terminal, así que
+ * además del PATH busca donde lo dejan sus instaladores. En Windows, `claude.cmd` (instalado con npm) no se puede
+ * lanzar sin consola: se usa el script de Node que hay detrás.
+ */
+export function resolverClaude(preferido?: string): ComandoClaude {
+  const win = process.platform === 'win32';
+  const casa = os.homedir();
+  const dirsPath = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter(Boolean);
+  const nombres = win ? ['claude.exe', 'claude.cmd'] : ['claude'];
+  const extras = win
+    ? [path.join(casa, '.local', 'bin'), path.join(process.env.LOCALAPPDATA ?? path.join(casa, 'AppData', 'Local'), 'Programs', 'claude'),
+      path.join(process.env.APPDATA ?? path.join(casa, 'AppData', 'Roaming'), 'npm')]
+    : [path.join(casa, '.local', 'bin'), path.join(casa, '.claude', 'local'), '/opt/homebrew/bin', '/usr/local/bin', path.join(casa, '.npm-global', 'bin')];
+  const candidatos = preferido ? [preferido] : [...dirsPath, ...extras].flatMap((d) => nombres.map((n) => path.join(d, n)));
+  const buscado: string[] = [];
+  for (const c of candidatos) {
+    buscado.push(c);
+    if (!existsSync(c)) continue;
+    if (win && /\.cmd$/i.test(c)) {
+      const pkg = path.join(path.dirname(c), 'node_modules', '@anthropic-ai', 'claude-code');
+      const binario = path.join(pkg, 'bin', 'claude.exe');
+      if (existsSync(binario)) return { comando: binario, prefijo: [], buscado };
+      const script = path.join(pkg, 'cli.js');
+      if (existsSync(script)) return { comando: process.execPath, prefijo: [script], env: { ELECTRON_RUN_AS_NODE: '1' }, buscado };
+      continue;
+    }
+    return { comando: c, prefijo: [], buscado };
+  }
+  // Último intento: que el sistema lo encuentre por su cuenta.
+  return { comando: preferido ?? 'claude', prefijo: [], buscado };
 }
 
 /** Revisa que Claude Code esté instalado, en una versión soportada y con sesión iniciada. */
-export async function revisarClaude(claude = 'claude'): Promise<EstadoClaude> {
+export async function revisarClaude(preferido?: string): Promise<EstadoClaude> {
+  const cmd = resolverClaude(preferido);
   const correr = (args: string[]) =>
-    new Promise<{ codigo: number; salida: string }>((ok) => {
-      const h = spawn(claude, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-      let salida = '';
-      h.stdout.on('data', (d) => (salida += d));
-      h.on('error', () => ok({ codigo: -1, salida: '' }));
-      h.on('close', (c) => ok({ codigo: c ?? 1, salida }));
+    new Promise<{ codigo: number; salida: string; error: string }>((ok) => {
+      let salida = '', error = '';
+      let h: ReturnType<typeof spawn>;
+      try {
+        h = spawn(cmd.comando, [...cmd.prefijo, ...args], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...cmd.env }, windowsHide: true });
+      } catch (e) {
+        ok({ codigo: -1, salida: '', error: (e as Error).message });
+        return;
+      }
+      h.stdout!.on('data', (d) => (salida += d));
+      h.stderr!.on('data', (d) => (error += d));
+      h.on('error', (e) => ok({ codigo: -1, salida, error: e.message }));
+      h.on('close', (c) => ok({ codigo: c ?? 1, salida, error }));
     });
+  const ruta = [cmd.comando, ...cmd.prefijo].join(' ');
   const v = await correr(['--version']);
   if (v.codigo !== 0) {
     return {
       instalado: false,
       sesionIniciada: false,
+      ruta,
+      detalle: `Intenté ${ruta}: ${(v.error || v.salida).trim() || `terminó con código ${v.codigo}`}.\nBusqué en:\n${cmd.buscado.slice(-12).join('\n')}`,
       pasos: ['Instala Claude Code: https://code.claude.com', 'Abre una terminal y corre `claude` una vez para iniciar sesión.', 'Vuelve a la app.'],
     };
   }
@@ -212,8 +272,9 @@ export async function revisarClaude(claude = 'claude'): Promise<EstadoClaude> {
   const a = await correr(['auth', 'status', '--json']);
   let sesionIniciada = false;
   try { sesionIniciada = !!JSON.parse(a.salida).loggedIn; } catch { /* versión sin auth status */ }
+  const detalle = sesionIniciada ? undefined : `${ruta} auth status --json contestó (código ${a.codigo}): ${(a.salida || a.error).trim().slice(0, 400)}`;
   const pasos: string[] = [];
   if (vieja) pasos.push(`Actualiza Claude Code (tienes ${version}; la app necesita ${minima.join('.')} o más nueva).`);
   if (!sesionIniciada) pasos.push('Abre una terminal y corre `claude` una vez para iniciar sesión con tu cuenta (Pro o Max).');
-  return { instalado: true, version, sesionIniciada, ...(pasos.length ? { pasos } : {}) };
+  return { instalado: true, version, sesionIniciada, ruta, ...(pasos.length ? { pasos } : {}), ...(detalle ? { detalle } : {}) };
 }
