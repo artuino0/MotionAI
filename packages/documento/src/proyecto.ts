@@ -4,6 +4,15 @@ import { NodoEsquema, RellenoEsquema, recorrer, type Nodo, type Relleno } from '
 
 export const VERSION_FORMATO = 1;
 
+/**
+ * Con qué se escribe el video. `motionai` es el motor propio (piezas en este documento); los demás son
+ * motores externos cuyo video vive en la carpeta `composicion/` del proyecto.
+ */
+export const MOTORES = ['motionai', 'hyperframes'] as const;
+export type Motor = (typeof MOTORES)[number];
+/** Carpeta del proyecto donde vive la composición de un motor externo. */
+export const CARPETA_COMPOSICION = 'composicion';
+
 export interface Fuente {
   familia: string;
   /** Ruta relativa al proyecto, por ejemplo `recursos/fuentes/Nunito-Black.ttf`. */
@@ -45,14 +54,18 @@ export interface ProyectoEntrada {
   formato: 'motionai';
   version: number;
   nombre: string;
+  /** Por defecto `motionai`. */
+  motor?: Motor;
   ajustes?: AjustesEntrada;
   fuentes?: Fuente[];
   frases?: Frase[];
   biblioteca?: Componente[];
+  /** Con el motor propio, al menos una. Con un motor externo, vacío: las escenas viven en la composición. */
   escenas: Escena[];
 }
 
-export interface Proyecto extends Omit<ProyectoEntrada, 'ajustes'> {
+export interface Proyecto extends Omit<ProyectoEntrada, 'ajustes' | 'motor'> {
+  motor: Motor;
   ajustes: Ajustes;
   fuentes: Fuente[];
   frases: Frase[];
@@ -99,13 +112,15 @@ export const ProyectoEsquema = z
     formato: z.literal('motionai'),
     version: z.literal(VERSION_FORMATO),
     nombre: z.string().min(1),
+    motor: z.enum(MOTORES).default('motionai'),
     ajustes: AjustesEsquema.prefault({}),
     fuentes: z.array(FuenteEsquema).default([]),
     frases: z.array(FraseEsquema).default([]),
     biblioteca: z.array(ComponenteEsquema).default([]),
-    escenas: z.array(EscenaEsquema).min(1),
+    escenas: z.array(EscenaEsquema).default([]),
   })
   .superRefine((p, ctx) => {
+    if (p.motor === 'motionai' && !p.escenas.length) ctx.addIssue({ code: 'custom', path: ['escenas'], message: 'El proyecto necesita al menos una escena' });
     // Ids únicos en todo el documento (escenas y biblioteca): Claude y la interfaz se refieren a las piezas por id.
     const vistos = new Set<string>();
     const unico = (id: string, path: (string | number)[]) => {
@@ -179,7 +194,7 @@ export function conFormato(p: Proyecto, formato: Formato, tam?: { ancho: number;
 
 /** Duración del proyecto en segundos. */
 export function duracionDe(p: Proyecto): number {
-  return p.ajustes.duracion ?? Math.max(...p.escenas.map((e) => e.fin));
+  return p.ajustes.duracion ?? Math.max(0, ...p.escenas.map((e) => e.fin));
 }
 
 /** Archivos que el proyecto necesita de `recursos/`. */

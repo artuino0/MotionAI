@@ -9,7 +9,8 @@ import SelectorIdioma from './SelectorIdioma.vue';
 const e = useEstudio();
 const recientes = ref<Reciente[]>([]);
 const revisando = ref(false);
-const nuevo = ref<NuevoProyecto>({ nombre: '', formato: '9:16', duracion: 15, fps: 30 });
+const nuevo = ref<NuevoProyecto>({ nombre: '', formato: '9:16', duracion: 15, fps: 30, motor: 'motionai' });
+const MOTORES = ['motionai', 'hyperframes'] as const;
 const brief = ref('');
 const creando = ref(false);
 const FORMATOS = ['9:16', '4:5', '1:1', '16:9'] as const;
@@ -107,6 +108,10 @@ async function abrir(ruta?: string) {
           <label>{{ t('inicio.nuevo.fps') }}
             <select v-model.number="nuevo.fps"><option :value="24">24</option><option :value="25">25</option><option :value="30">30</option><option :value="60">60</option></select>
             <span class="nota">{{ t('inicio.nuevo.fpsNota') }}</span>
+          </label>
+          <label>{{ t('inicio.nuevo.motor') }}
+            <select v-model="nuevo.motor"><option v-for="m in MOTORES" :key="m" :value="m">{{ t(`motor.${m}` as const) }}</option></select>
+            <span class="nota">{{ t(`motor.${nuevo.motor ?? 'motionai'}.nota` as const) }}</span>
           </label>
         </details>
         <div class="enviar">

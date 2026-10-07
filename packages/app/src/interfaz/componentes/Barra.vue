@@ -12,7 +12,7 @@ const resumen = computed(() => {
   return t('barra.resumen', {
     formato: t(`formato.corto.${a.formato}` as const),
     duracion: e.duracion.toFixed(e.duracion % 1 ? 1 : 0),
-    escenas: t('barra.escenas', { n: e.proyecto!.escenas.length }),
+    escenas: t('barra.escenas', { n: e.esHtml ? e.escenasHtml.length : e.proyecto!.escenas.length }),
   });
 });
 const progreso = computed(() => (e.exportando ? Math.round((e.exportando.hechos / Math.max(1, e.exportando.total)) * 100) : 0));

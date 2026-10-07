@@ -37,7 +37,7 @@ describe('servidor MCP', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'abrir_proyecto', 'agregar_pieza', 'ajustes_proyecto', 'buscar_biblioteca', 'cambiar', 'crear_pieza', 'escenas',
-      'exportar', 'importar', 'leer_estado', 'leer_proyecto', 'leer_skill', 'nuevo_proyecto', 'quitar_pieza', 'ver_cuadro', 'versiones', 'voz',
+      'exportar', 'importar', 'leer_estado', 'leer_proyecto', 'leer_skill', 'nuevo_proyecto', 'quitar_pieza', 'revisar', 'ver_cuadro', 'versiones', 'voz',
     ]);
     expect(client.getInstructions()).toMatch(/leer_skill/);
   });
@@ -82,6 +82,10 @@ describe('lanzar Claude', () => {
     const con = argumentosClaude({ ...base, modelo: 'opus', esfuerzo: 'high' }, '/tmp/mcp.json');
     expect(con.slice(con.indexOf('--model'), con.indexOf('--model') + 2)).toEqual(['--model', 'opus']);
     expect(con.slice(con.indexOf('--effort'), con.indexOf('--effort') + 2)).toEqual(['--effort', 'high']);
+    const archivos = argumentosClaude({ ...base, archivos: true }, '/tmp/mcp.json');
+    expect(archivos.slice(archivos.indexOf('--tools'), archivos.indexOf('--tools') + 2)).toEqual(['--tools', 'Read,Write,Edit,Glob,Grep']);
+    expect(archivos).toContain('acceptEdits');
+    expect(con.slice(con.indexOf('--tools'), con.indexOf('--tools') + 2)).toEqual(['--tools', '']);
     const sin = argumentosClaude(base, '/tmp/mcp.json');
     expect(sin).not.toContain('--model');
     expect(sin).not.toContain('--effort');

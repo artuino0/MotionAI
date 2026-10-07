@@ -49,7 +49,13 @@ export class Chat {
   private control?: AbortController;
   private archivo: string;
 
-  constructor(base: string, private lanzar: Omit<OpcionesAgente, 'mensaje' | 'sesion' | 'senal'>) {
+  constructor(
+    base: string,
+    private lanzar: Omit<OpcionesAgente, 'mensaje' | 'sesion' | 'senal'> & {
+      /** Al terminar cada respuesta (con un motor de archivos, guarda la versión con lo último que editó Claude). */
+      alTerminar?: () => Promise<void>;
+    },
+  ) {
     this.archivo = path.join(base, '.motionai', 'chat.json');
   }
 
@@ -110,15 +116,17 @@ export class Chat {
       claude.versionDespues = version();
       alTurno({ ...claude, herramientas: [...claude.herramientas!] });
     };
+    const { alTerminar, ...lanzar } = this.lanzar;
     try {
       await lanzarAgente(
-        { ...this.lanzar, ...opciones, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA[idioma] },
+        { ...lanzar, ...opciones, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA[idioma] },
         alEvento,
       );
     } catch (e) {
       claude.error = (e as Error).message;
     } finally {
       this.control = undefined;
+      await alTerminar?.().catch(() => undefined);
       claude.enCurso = false;
       claude.versionDespues = version();
       alTurno({ ...claude, herramientas: [...claude.herramientas!] });

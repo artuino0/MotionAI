@@ -6,6 +6,34 @@ import { useEstudio, type Vista } from '../tiendas/estudio.js';
 import { dibujarMarca, dibujarVista, piezaEn } from '../util/dibujo.js';
 import { nombreEscena } from '../util/nombres.js';
 import Icono from './Icono.vue';
+import '@hyperframes/player';
+
+/** Lo que usamos del reproductor de HyperFrames. */
+interface Jugador extends HTMLElement {
+  seek(t: number): void;
+  readonly ready: boolean;
+  readonly duration: number;
+  readonly scenes: { id: string; start: number; duration: number }[];
+}
+const jugador = ref<Jugador>();
+const ancho = computed(() => e.escenario?.ancho ?? 1080);
+const alto = computed(() => e.escenario?.alto ?? 1920);
+// La versión en la URL hace que el reproductor recargue cuando Claude cambia la composición.
+const fuente = computed(() => `proyecto://local/composicion/index.html?v=${e.version}`);
+let pendiente = false;
+function irAlTiempo() {
+  if (!e.esHtml || pendiente) return;
+  pendiente = true;
+  requestAnimationFrame(() => {
+    pendiente = false;
+    if (jugador.value?.ready) jugador.value.seek(e.tiempo);
+  });
+}
+function listo() {
+  const j = jugador.value;
+  if (!j) return;
+  j.seek(e.tiempo);
+}
 
 const e = useEstudio();
 const lienzo = ref<HTMLCanvasElement>();
@@ -27,7 +55,22 @@ function acomodar() {
   tam.value = { w: Math.floor(esc.ancho * k), h: Math.floor(esc.alto * k) };
 }
 
+/** Con HTML solo se dibuja la capa (vista de la plataforma); el cuadro lo pone el reproductor. */
+function dibujarCapaHtml() {
+  const esc = e.escenario, o = capa.value;
+  if (!esc || !o) return;
+  if (o.width !== esc.ancho || o.height !== esc.alto) { o.width = esc.ancho; o.height = esc.alto; acomodar(); }
+  const ctx = o.getContext('2d')!;
+  ctx.clearRect(0, 0, o.width, o.height);
+  dibujarVista(ctx, esc, e.vista, {
+    zona: t('monitor.zona'),
+    soloVertical: t('monitor.soloVertical'),
+    cabecera: idioma.value === 'en' ? 'Following     For You' : 'Siguiendo     Para ti',
+  });
+}
+
 function dibujar() {
+  if (e.esHtml) { dibujarCapaHtml(); irAlTiempo(); return; }
   const esc = e.escenario, c = lienzo.value, o = capa.value;
   if (!esc || !c || !o) return;
   if (c.width !== esc.ancho || c.height !== esc.alto) {
@@ -57,6 +100,8 @@ function clic(ev: MouseEvent) {
   const r = capa.value.getBoundingClientRect();
   const x = ((ev.clientX - r.left) / r.width) * esc.ancho;
   const y = ((ev.clientY - r.top) / r.height) * esc.alto;
+  // En HTML no hay piezas medidas: se señala el momento y el punto, y Claude ubica el elemento en su composición.
+  if (e.esHtml) { e.senalarMomento([Math.round(x), Math.round(y)]); return; }
   const p = piezaEn(registros, x, y);
   if (!p) { e.seleccionar(null); return; }
   e.senalarPieza(p.ruta, [Math.round(x), Math.round(y)]);
@@ -84,7 +129,11 @@ onBeforeUnmount(() => obs.disconnect());
       </div>
       <div v-if="e.errorDocumento && !e.escenario" class="error" role="alert">{{ e.errorDocumento }}</div>
       <div class="pantalla" :class="{ trabajando: e.respondiendo }" :style="{ width: tam.w + 'px', height: tam.h + 'px' }">
-        <canvas ref="lienzo" />
+        <hyperframes-player
+          v-if="e.esHtml" ref="jugador" class="jugador" :src="fuente" :width="ancho" :height="alto"
+          muted disable-click-to-play assets-loading-ui="none" @ready="listo"
+        />
+        <canvas v-else ref="lienzo" />
         <canvas ref="capa" class="capa" role="img" :aria-label="t('monitor.lienzo')" @click="clic" />
       </div>
     </div>
@@ -116,6 +165,7 @@ onBeforeUnmount(() => obs.disconnect());
 .pantalla.trabajando { box-shadow: 0 14px 40px -10px #000, 0 0 0 2px #f2b84b66; }
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .capa { cursor: crosshair; }
+.jugador { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .claude {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2;
   display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;

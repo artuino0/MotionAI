@@ -17,6 +17,9 @@ const NOMBRE_MCP = 'motionai';
 /** Cuánto espera Claude Code a una herramienta (exportar un video largo puede tardar minutos). */
 export const TIEMPO_HERRAMIENTA_MS = 15 * 60 * 1000;
 
+/** Herramientas de archivos de Claude Code para los motores que se escriben en archivos. Sin terminal ni web. */
+export const HERRAMIENTAS_ARCHIVOS = ['Read', 'Write', 'Edit', 'Glob', 'Grep'];
+
 export const ESFUERZOS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Esfuerzo = (typeof ESFUERZOS)[number];
 
@@ -32,6 +35,11 @@ export interface OpcionesAgente {
   modelo?: string;
   /** Esfuerzo de razonamiento. Sin él, el de Claude Code. */
   esfuerzo?: Esfuerzo;
+  /**
+   * Con un motor que se escribe en archivos (HyperFrames), Claude puede leer y editar archivos, pero solo
+   * dentro de `cwd` (la carpeta del proyecto): las ediciones fuera de ella piden permiso y en modo -p se niegan.
+   */
+  archivos?: boolean;
   /** Ejecutable de Claude Code; por defecto `claude` del PATH. */
   claude?: string;
   cwd?: string;
@@ -74,8 +82,9 @@ export function argumentosClaude(op: OpcionesAgente, rutaConfig: string): string
     '-p', op.mensaje,
     '--output-format', 'stream-json', '--verbose',
     '--mcp-config', rutaConfig, '--strict-mcp-config',
-    '--tools', '',
-    '--allowedTools', `mcp__${NOMBRE_MCP}`,
+    '--tools', op.archivos ? HERRAMIENTAS_ARCHIVOS.join(',') : '',
+    '--allowedTools', [`mcp__${NOMBRE_MCP}`, ...(op.archivos ? HERRAMIENTAS_ARCHIVOS : [])].join(','),
+    ...(op.archivos ? ['--permission-mode', 'acceptEdits'] : []),
   ];
   if (op.sesion) args.push('--resume', op.sesion);
   if (op.modelo) args.push('--model', op.modelo);

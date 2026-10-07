@@ -70,7 +70,15 @@ const entradaDe = (id: string) => e.escenario?.escenas.flatMap((x) => x.hijos).f
     <div :id="`panel-medios-${pestana}`" class="contenido desplazable" role="tabpanel" :aria-labelledby="`tab-medios-${pestana}`">
       <template v-if="pestana === 'escenas'">
         <p v-if="!e.tieneContenido" class="vacio tenue">{{ t('medios.escenasVacio') }}</p>
-        <ul class="escenas" :class="{ vertical }">
+        <ul v-if="e.esHtml" class="escenas-html">
+          <li v-for="(x, i) in e.escenasHtml" :key="x.id">
+            <button class="frase" :class="{ actual: e.tiempo >= x.inicio && e.tiempo < x.fin }" @click="e.pausar(); e.irA(x.inicio)">
+              <span>{{ t('medios.escenaN', { n: i + 1 }) }}</span>
+              <span class="tenue">{{ x.inicio.toFixed(2) }}–{{ x.fin.toFixed(2) }} s</span>
+            </button>
+          </li>
+        </ul>
+        <ul v-else class="escenas" :class="{ vertical }">
           <li v-for="x in e.proyecto?.escenas" :key="x.id" class="escena" :class="{ actual: e.escenaActual?.escena.id === x.id }">
             <button class="mini" :style="{ aspectRatio: proporcion }" :aria-label="nombreEscena(e.proyecto, x.id)" @click="irEscena(x.id)">
               <img v-if="minis[x.id]" :src="minis[x.id]" alt="" />
@@ -172,7 +180,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 .vacio { margin: 2px 0 12px; line-height: 1.5; }
 .componente { padding: 10px; border: 1px solid var(--borde); border-radius: var(--radio-chico); margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
 .componente strong { display: flex; gap: 6px; align-items: center; }
-.frases { display: flex; flex-direction: column; gap: 4px; }
+.frases, .escenas-html { display: flex; flex-direction: column; gap: 4px; }
+.frase.actual { border-color: var(--acento); }
 .audio { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .audio button { justify-content: flex-start; }
 .punto { width: 7px; height: 7px; border-radius: 50%; background: var(--acento); display: inline-block; animation: latido 1.1s infinite; }

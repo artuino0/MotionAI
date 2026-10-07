@@ -51,6 +51,7 @@ Para ver el resultado mientras Claude trabaja: `pnpm visor` y abre `http://local
 | `escenas` | Crear, quitar, partir y mover cortes |
 | `voz` | Carga voz o música; la voz se transcribe con whisper.cpp (local) y se arma en frases con los tiempos de las pausas |
 | `importar` | Trae un SVG a la biblioteca, o de un `.pen` sus piezas reusables o una campaña completa |
+| `revisar` | Revisa el video completo: zonas de las plataformas, textos fuera del lienzo o chicos y, con HyperFrames, la revisión de la composición |
 | `ver_cuadro` | Hoja de 1 a 6 cuadros reducidos, con zonas tapadas y piezas resaltadas si se pide |
 | `exportar` | MP4 con el mismo motor del previo |
 | `versiones` | Lista el historial o vuelve a una versión |
@@ -103,4 +104,13 @@ Los importadores (`packages/importar`) son una puerta de entrada, no el centro: 
 **`.pen`** (Pencil). Por defecto se traen las piezas reusables a la biblioteca, con las que usan por dentro y las imágenes que necesitan (se copian a `recursos/`). Con `modo: "campana"` se trae una campaña completa: escenas con su animación (`entra`, `en`, `dur`, `sale`, marcas `f2+0.5`), frases, voz con su desfase, formato y duración; reemplaza las escenas del proyecto y queda como una versión, así que se puede volver. Los errores de reglas que trae el diseño original no rechazan la importación: quedan como avisos para corregirlos después.
 
 Con Flow Sites salen las 6 escenas, las 9 frases, la voz a 0.25 s y los 28 componentes, y los cuadros coinciden con el MP4 original salvo lo que pertenece al estilo de Flow: los actores animados por código (persona, conexión, isotipo, confeti) llegan como dibujos fijos, las etiquetas conservan el papel del diseño aunque cambie su texto, la escena 1 no se desatura y el grano del papel se omite. Eso llega con el estilo de papel recortado y el kit de Flow.
+
+## Motores
+
+Cada proyecto elige con qué se escribe el video (`motor` en `proyecto.json`, o al crearlo con `nuevo_proyecto`):
+
+- **`motionai`** (por defecto): piezas en el documento, con las herramientas de piezas.
+- **`hyperframes`**: HTML y CSS con animaciones WAAPI en `composicion/index.html` ([HyperFrames](https://github.com/heygen-com/hyperframes), Apache 2.0). Claude edita los archivos con Read, Write y Edit, limitados a la carpeta del proyecto (`lanzarAgente` con `archivos: true`); las herramientas de piezas lo rechazan con una explicación. Antes de cada herramienta y al final de cada respuesta, la app guarda una versión con los archivos de texto de la composición, y `versiones` los restaura. `ver_cuadro` usa `hyperframes snapshot`, `exportar` usa `hyperframes render` y `revisar` junta `hyperframes check` con la medición de los textos en Chrome sin ventana (zonas de plataformas, fuera del lienzo, texto chico).
+
+Para HyperFrames hace falta Chrome sin ventana: `MOTIONAI_CHROME`, `MOTIONAI_RECURSOS/chrome` o el de Playwright; si no hay, HyperFrames baja el suyo. Las composiciones no usan GSAP: su licencia prohíbe usarlo en herramientas para crear animaciones sin código.
 

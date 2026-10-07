@@ -3,19 +3,21 @@
  * (guion, voz, colores e isotipo en SVG), sin el .pen ni el motor de Python, con las herramientas MCP de la
  * app. La voz se transcribe con whisper.cpp (MOTIONAI_WHISPER y MOTIONAI_WHISPER_MODELO).
  *
- * Uso: pnpm fase4
- * Deja el proyecto, el MP4, una hoja de cuadros y la bitácora en salida/fase4/.
+ * Uso: pnpm fase4 [motionai|hyperframes]
+ * Deja el proyecto, el MP4, una hoja de cuadros y la bitácora en salida/fase4/ (o salida/fase4-hyperframes/).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, rm, writeFile, appendFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Estudio, encontrarWhisper } from '@motionai/estudio';
 import { lanzarAgente, type EventoAgente } from '@motionai/mcp';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SALIDA = path.join(RAIZ, 'salida', 'fase4');
+const MOTOR = (process.argv[2] ?? 'motionai') as 'motionai' | 'hyperframes';
+const HF = MOTOR === 'hyperframes';
+const SALIDA = path.join(RAIZ, 'salida', HF ? 'fase4-hyperframes' : 'fase4');
 const MARCA = path.join(RAIZ, 'referencia', 'flow-sites', 'marca');
 const VOZ = path.join(MARCA, 'voz_flow_sites.mp3');
 const ISOTIPO = path.join(MARCA, 'isotipo-flow.svg');
@@ -30,7 +32,9 @@ const GUION = [
   '[proud] Flow, tu negocio en un solo flujo.',
 ];
 const BRIEF = [
-  'Haz mi comercial de Flow Sites para TikTok y Reels (9:16), en estilo papel recortado.',
+  HF
+    ? 'Haz mi comercial de Flow Sites para TikTok y Reels (9:16). El proyecto ya está abierto y usa el motor HyperFrames: escríbelo en HTML.'
+    : 'Haz mi comercial de Flow Sites para TikTok y Reels (9:16), en estilo papel recortado.',
   '',
   'Flow es una plataforma para negocios chicos (estéticas, consultorios, talleres) que junta clientes, agenda y avisos en un solo lugar. ' +
     'Flow Sites es su creador de páginas web: la página queda conectada al negocio. Los datos que deja un cliente entran solos a la lista de clientes, ' +
@@ -41,7 +45,7 @@ const BRIEF = [
   '',
   'El video dura lo que dura la voz y lleva subtítulos. Cada escena debe mostrar lo que dice la voz en ese momento.',
   'Colores de la marca: azul petróleo #006E84, turquesa #0091AE, coral #FF7A66, menta #9ED3C0, mostaza #EDB43E, crema #FBF3E4 y tinta #3A2E30. Letra: Nunito.',
-  `Nuestro isotipo está en ${ISOTIPO}. Cierra con el isotipo, la palabra «Flow» y «tu negocio en un solo flujo».`,
+  `Nuestro isotipo está en ${HF ? 'composicion/assets/isotipo-flow.svg' : ISOTIPO}. Cierra con el isotipo, la palabra «Flow» y «tu negocio en un solo flujo».`,
   '',
   'Cuando esté listo, revísalo y expórtalo.',
 ].join('\n');
@@ -66,7 +70,18 @@ async function principal() {
   const inicio = Date.now();
   const cola: Promise<void>[] = [];
 
-  await lanzarAgente({ mensaje: BRIEF, carpetaProyectos: carpeta }, (e) => {
+  // Con HyperFrames el proyecto se crea antes, como en la app, y Claude trabaja con archivos dentro de él.
+  let proyectoHf: string | undefined;
+  if (HF) {
+    const e = await Estudio.crear({ carpeta: path.join(carpeta, 'flow-sites'), nombre: 'Flow Sites', motor: 'hyperframes', formato: '9:16', duracion: 30 });
+    await copyFile(ISOTIPO, path.join(e.composicion, 'assets', 'isotipo-flow.svg'));
+    proyectoHf = e.ruta;
+    e.cerrar();
+  }
+  await lanzarAgente({
+    mensaje: BRIEF, carpetaProyectos: carpeta,
+    ...(proyectoHf ? { proyecto: proyectoHf, cwd: path.dirname(proyectoHf), archivos: true } : {}),
+  }, (e) => {
     switch (e.tipo) {
       case 'inicio':
         cola.push(anotar(`- Sesión ${e.sesion} · modelo ${e.modelo} · herramientas: ${e.herramientas.join(', ')}\n`));
@@ -103,28 +118,38 @@ async function principal() {
   const piezas = p.escenas.reduce((n, e) => n + e.hijos.length, 0);
   const mp4s = execFileSync('find', [path.dirname(proyectos[0]!), '-name', '*.mp4'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
   const dur = mp4s[0] ? Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', mp4s[0]], { encoding: 'utf8' })) : 0;
-  const duracion = p.ajustes.duracion ?? Math.max(...p.escenas.map((e) => e.fin));
+  const html = HF ? await readFile(path.join(estudio.composicion, 'index.html'), 'utf8') : '';
+  const duracionHf = Number(/data-composition-id="[^"]*"[^>]*data-duration="([\d.]+)"/.exec(html)?.[1] ?? /data-duration="([\d.]+)"[^>]*data-composition-id/.exec(html)?.[1]);
+  const duracion = HF ? duracionHf : p.ajustes.duracion ?? Math.max(...p.escenas.map((e) => e.fin));
   // Un cuadro a media frase, para ver cada momento de la voz con lo que muestra.
   const tiempos = p.frases.map((f) => Math.round(((f.inicio + f.fin) / 2) * 10) / 10);
   for (let i = 0; i < tiempos.length; i += 6) {
     await writeFile(path.join(SALIDA, `hoja_${i / 6 + 1}.png`), await estudio.verCuadro(tiempos.slice(i, i + 6), { lado: 640 }));
   }
-  const dichas = palabras(p.frases.map((f) => f.texto).join(' ')), guion = palabras(GUION.join(' '));
-  const coinciden = guion.filter((w, i) => dichas[i] === w).length / guion.length;
+  const guion = palabras(GUION.join(' '));
+  // Con HyperFrames los subtítulos los escribe Claude en el HTML: basta con que cada palabra del guion esté ahí.
+  const textoHtml = new Set(palabras(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/g, ' ')));
+  const dichas = palabras(p.frases.map((f) => f.texto).join(' '));
+  const coinciden = (HF ? guion.filter((w) => textoHtml.has(w)) : guion.filter((w, i) => dichas[i] === w)).length / guion.length;
   const finVoz = (p.ajustes.audio.voz?.inicio ?? 0) + Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', VOZ], { encoding: 'utf8' }));
-  const usaIsotipo = p.biblioteca.some((c) => JSON.stringify(c).includes('0091AE') && JSON.stringify(p.escenas).includes(`"componente":"${c.id}"`));
+  const revision = HF ? await estudio.revisar() : undefined;
+  const usaIsotipo = HF ? /isotipo-flow\.svg|0091ae/i.test(html) : p.biblioteca.some((c) => JSON.stringify(c).includes('0091AE') && JSON.stringify(p.escenas).includes(`"componente":"${c.id}"`));
 
   const checks: [string, boolean][] = [
     ['Proyecto creado por Claude', true],
-    ['Formato 9:16 y estilo papel', p.ajustes.formato === '9:16' && p.ajustes.estilo === 'papel'],
+    HF ? ['Formato 9:16 con HyperFrames', p.ajustes.formato === '9:16' && p.motor === 'hyperframes' && /data-width="1080"/.test(html)]
+      : ['Formato 9:16 y estilo papel', p.ajustes.formato === '9:16' && p.ajustes.estilo === 'papel'],
     ['Voz cargada', p.ajustes.audio.voz?.archivo.endsWith('.mp3') === true],
     [`Subtítulos iguales al guion (${Math.round(coinciden * 100)} % de las palabras)`, coinciden > 0.95],
     [`El video dura al menos lo que la voz (${duracion} s; la voz termina en ${finVoz.toFixed(2)} s)`, duracion >= finVoz - 0.05],
-    ['Isotipo importado del SVG y usado', usaIsotipo],
-    ['Más de una escena', p.escenas.length > 1],
+    [HF ? 'Isotipo usado' : 'Isotipo importado del SVG y usado', usaIsotipo],
+    ...(revision ? [[`Revisión sin errores (${revision.errores.length} errores, ${revision.avisos.length} avisos)`, !revision.errores.length] as [string, boolean]] : []),
+    HF ? ['Más de una escena', (html.match(/class="[^"]*\bclip\b[^"]*"[^>]*data-start/g) ?? []).length > 1]
+      : ['Más de una escena', p.escenas.length > 1],
     ['Claude revisó su trabajo con ver_cuadro', conteo.vistas > 0],
     ['MP4 exportado de la duración del video', Math.abs(dur - duracion) < 0.2],
-    ['Sin herramientas fuera del MCP', [...conteo.porHerramienta.keys()].every((n) => !/^(Bash|Read|Write|Edit|Glob|Grep)$/.test(n))],
+    HF ? ['Sin terminal ni web (solo archivos y MCP)', [...conteo.porHerramienta.keys()].every((n) => !/^(Bash|WebFetch|WebSearch|Task)$/.test(n))]
+      : ['Sin herramientas fuera del MCP', [...conteo.porHerramienta.keys()].every((n) => !/^(Bash|Read|Write|Edit|Glob|Grep)$/.test(n))],
   ];
   const resumen = [
     '\n## Resultado\n',

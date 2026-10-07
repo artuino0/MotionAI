@@ -8,6 +8,7 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root: path.join(AQUI, 'src/interfaz'),
   base: './',
-  plugins: [vue()],
+  // <hyperframes-player> es un elemento propio del navegador, no un componente de Vue.
+  plugins: [vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('hyperframes-') } } })],
   build: { outDir: path.join(AQUI, 'dist/interfaz'), emptyOutDir: true, chunkSizeWarningLimit: 2000 },
 });

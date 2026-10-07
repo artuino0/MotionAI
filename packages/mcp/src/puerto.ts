@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Componente, Formato, Frase, Nodo, ProyectoEntrada } from '@motionai/documento';
+import type { Componente, Formato, Frase, Motor, Nodo, ProyectoEntrada } from '@motionai/documento';
 import { Estudio, type Resultado, type Tramo, type Version } from '@motionai/estudio';
 
 /** Lo que la app sabe y Claude no: qué ve el usuario y qué tocó para el mensaje. */
@@ -40,6 +40,7 @@ export interface OpcionesNuevo {
   alto?: number;
   fondo?: string;
   carpeta?: string;
+  motor?: Motor;
 }
 
 /**
@@ -60,6 +61,10 @@ export interface PuertoEstudio {
   escenas(op: Parameters<Estudio['escenas']>[0]): Promise<Resultado>;
   audio(op: { archivo: string; tipo?: 'voz' | 'musica'; inicio?: number; volumen?: number; frases?: Frase[]; transcribir?: boolean; idioma?: string }): Promise<ResultadoAudio>;
   importar(op: OpcionesImportar): Promise<ResultadoImportar>;
+  /** Revisión del video: reglas del motor propio o la de un motor externo, más las zonas de las plataformas. */
+  revisar(): Promise<{ errores: string[]; avisos: string[] }>;
+  /** Con un motor externo, guarda una versión si Claude cambió los archivos de la composición. */
+  sincronizar(): Promise<void>;
   buscarBiblioteca(texto?: string, tipo?: string): Promise<Componente[]>;
   verCuadro(tiempos: number[], op: { zonas?: boolean; resaltar?: string[]; formato?: Formato; lado?: number }): Promise<Buffer>;
   exportar(op: { salida?: string; formato?: Formato; desde?: number; hasta?: number }): Promise<ResultadoExportar>;
@@ -69,7 +74,7 @@ export interface PuertoEstudio {
 
 export const METODOS_PUERTO = [
   'estado', 'resumen', 'documento', 'nuevo', 'abrir', 'ajustes', 'crearPieza', 'agregarPieza', 'cambiar', 'quitarPieza',
-  'escenas', 'audio', 'importar', 'buscarBiblioteca', 'verCuadro', 'exportar', 'versiones', 'volverA',
+  'escenas', 'audio', 'importar', 'revisar', 'sincronizar', 'buscarBiblioteca', 'verCuadro', 'exportar', 'versiones', 'volverA',
 ] as const satisfies readonly (keyof PuertoEstudio)[];
 
 export class ErrorSinProyecto extends Error {
@@ -158,6 +163,11 @@ export class PuertoLocal implements PuertoEstudio {
     return r;
   }
   importar(op: OpcionesImportar) { return this.cambio('importar', this.abierto().importar(op)); }
+  revisar() { return this.abierto().revisar(); }
+  async sincronizar() {
+    const v = await this.estudio?.sincronizar();
+    if (v) for (const f of this.oyentes) f({ version: v, herramienta: 'claude', mensaje: 'Claude cambió la composición' });
+  }
   async buscarBiblioteca(texto?: string, tipo?: string) { return this.abierto().buscarBiblioteca(texto, tipo); }
   verCuadro(tiempos: number[], op: Parameters<PuertoEstudio['verCuadro']>[1]) { return this.abierto().verCuadro(tiempos, op); }
   exportar(op: Parameters<PuertoEstudio['exportar']>[0]) { return this.abierto().exportar({ ...op, progreso: this.op.progresoExportar }); }

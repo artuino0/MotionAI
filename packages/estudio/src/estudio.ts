@@ -2,18 +2,19 @@ import { existsSync, statSync } from 'node:fs';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  FORMATO_IDS, VERSION_FORMATO, conFormato, dimensiones, duracionDe, validarProyecto,
+  CARPETA_COMPOSICION, FORMATO_IDS, VERSION_FORMATO, type Motor, conFormato, dimensiones, duracionDe, validarProyecto,
   type Componente, type Escena, type Formato, type Frase, type Nodo, type Proyecto, type ProyectoEntrada,
 } from '@motionai/documento';
 import { ErrorPreparar, ErrorTrazado, preparar } from '@motionai/motor';
 import { campanaDePen, campanasDePen, componenteDeSvg, componentesDePen, leerPen } from '@motionai/importar';
 import { cargarRecursos, exportarMP4, rutaPorDefecto } from '@motionai/render';
 import { buscarEscena, buscarPieza, idsUsados } from './buscar.js';
-import { asegurarFuentes, catalogoFuentes } from './catalogo.js';
+import { asegurarFuentes, carpetaFuentes, catalogoFuentes } from './catalogo.js';
 import { Historial, type Version } from './historial.js';
 import { formatearJson } from './json.js';
-import { analizar, claveHallazgo, type Analisis, type Hallazgo } from './reglas.js';
-import { hojaDeCuadros, type OpcionesVista } from './vista.js';
+import { analizar, claveHallazgo, reglasDeTextos, type Analisis, type Hallazgo } from './reglas.js';
+import { hojaDeCuadros, hojaDeImagenes, type OpcionesVista } from './vista.js';
+import * as hf from './motores/hyperframes.js';
 import { armarFrases, encontrarWhisper, transcribir } from './transcribir.js';
 import { duracionAudio, tramosDeVoz, type Tramo } from './voz.js';
 
@@ -42,6 +43,14 @@ function mezclar(destino: Objeto, cambios: Objeto, profundo = true): void {
 
 const describir = (h: Hallazgo) => `[${h.regla}] ${h.mensaje}`;
 
+/** Herramientas que editan piezas del motor propio; con un motor externo no aplican. */
+const SOLO_MOTIONAI = new Set(['crear_pieza', 'agregar_pieza', 'cambiar', 'quitar_pieza', 'escenas', 'importar']);
+const NOMBRE_MOTOR: Record<Motor, string> = { motionai: 'MotionAI', hyperframes: 'HyperFrames' };
+
+/** Lo que se guarda en el historial: el documento y, con un motor externo, los archivos de texto de la composición. */
+interface Guardado { proyecto: ProyectoEntrada; archivos: Record<string, string> }
+const esGuardado = (v: unknown): v is Guardado => !!v && typeof v === 'object' && 'proyecto' in v && 'archivos' in v;
+
 /**
  * Un proyecto abierto. Todo cambio pasa por `aplicar`: se valida el esquema, se prepara para el motor,
  * se revisan las reglas y solo entonces se guarda el archivo y una versión nueva.
@@ -69,6 +78,31 @@ export class Estudio {
     return this.historial.ultima();
   }
 
+  /** Motor con que se escribe el video. */
+  get motor(): Motor {
+    return this.doc.motor ?? 'motionai';
+  }
+
+  /** Carpeta de la composición de un motor externo. */
+  get composicion(): string {
+    return path.join(this.base, CARPETA_COMPOSICION);
+  }
+
+  private archivosGuardados = '';
+
+  /**
+   * Con un motor externo, Claude edita los archivos de la composición directamente. Esto guarda una versión
+   * si cambiaron desde la última; la app y el servidor lo llaman antes de cada herramienta y al final de cada respuesta.
+   */
+  async sincronizar(herramienta = 'claude', resumen = 'Cambios en la composición'): Promise<number | undefined> {
+    if (this.motor === 'motionai') return undefined;
+    const archivos = await hf.leerArchivos(this.composicion);
+    const clave = JSON.stringify(archivos);
+    if (clave === this.archivosGuardados) return undefined;
+    this.archivosGuardados = clave;
+    return this.historial.guardar({ proyecto: this.doc, archivos } satisfies Guardado, herramienta, resumen);
+  }
+
   /** El documento tal como está escrito (sin valores por defecto). */
   get documento(): ProyectoEntrada {
     return structuredClone(this.doc);
@@ -81,9 +115,17 @@ export class Estudio {
     const r = validarProyecto(doc);
     if (!r.ok) throw new ErrorEstudio(`El proyecto no es válido:\n- ${r.errores.join('\n- ')}`);
     const historial = new Historial(path.dirname(ruta));
-    if (historial.ultima() === 0) historial.guardar(doc, 'abrir_proyecto', 'Proyecto abierto');
-    const { entorno } = await cargarRecursos({ proyecto: r.proyecto, base: path.dirname(ruta) });
-    const e = new Estudio(ruta, doc, historial, analizar(r.proyecto, entorno));
+    let e: Estudio;
+    if (r.proyecto.motor === 'motionai') {
+      if (historial.ultima() === 0) historial.guardar(doc, 'abrir_proyecto', 'Proyecto abierto');
+      const { entorno } = await cargarRecursos({ proyecto: r.proyecto, base: path.dirname(ruta) });
+      e = new Estudio(ruta, doc, historial, analizar(r.proyecto, entorno));
+    } else {
+      e = new Estudio(ruta, doc, historial, { errores: [], avisos: [] } as unknown as Analisis);
+      const ultimo = historial.leer(historial.ultima());
+      if (esGuardado(ultimo)) e.archivosGuardados = JSON.stringify(ultimo.archivos);
+      await e.sincronizar('abrir_proyecto', 'Proyecto abierto');
+    }
     e.mtime = statSync(ruta).mtimeMs;
     return e;
   }
@@ -97,6 +139,7 @@ export class Estudio {
     fps?: number;
     duracion?: number;
     fondo?: string;
+    motor?: Motor;
   }): Promise<Estudio> {
     const ruta = path.resolve(op.carpeta, 'proyecto.json');
     if (existsSync(ruta)) throw new ErrorEstudio(`Ya existe un proyecto en ${ruta}. Ábrelo con abrir_proyecto.`);
@@ -114,9 +157,22 @@ export class Estudio {
       biblioteca: [],
       escenas: [{ id: 'e1', nombre: 'Escena 1', inicio: 0, fin: duracion, hijos: [] }],
     } as unknown as ProyectoEntrada;
+    if (op.motor && op.motor !== 'motionai') {
+      doc.motor = op.motor;
+      doc.escenas = [];
+      delete (doc as Partial<ProyectoEntrada>).biblioteca;
+    }
     const r = validarProyecto(doc);
     if (!r.ok) throw new ErrorEstudio(`No se pudo crear el proyecto:\n- ${r.errores.join('\n- ')}`);
     await mkdir(path.join(path.dirname(ruta), 'recursos'), { recursive: true });
+    if (r.proyecto.motor === 'hyperframes') {
+      const { ancho, alto } = dimensiones(r.proyecto.ajustes);
+      const fuentes = catalogoFuentes().flatMap((f) =>
+        Object.entries(f.pesos).map(([peso, archivo]) => ({ familia: f.familia, peso: Number(peso), archivo: path.join(carpetaFuentes(), archivo) })));
+      await hf.crearComposicion(path.join(path.dirname(ruta), CARPETA_COMPOSICION), {
+        ancho, alto, duracion, fondo: r.proyecto.ajustes.fondo, nombre: op.nombre, fuentes,
+      });
+    }
     await writeFile(ruta, formatearJson(doc) + '\n');
     return Estudio.abrir(ruta);
   }
@@ -149,6 +205,12 @@ export class Estudio {
 
   private async aplicarAhora(herramienta: string, mutar: (doc: ProyectoEntrada) => string | Promise<string>, tolerarReglas = false): Promise<Resultado> {
     await this.recargarSiCambio();
+    if (this.motor !== 'motionai' && SOLO_MOTIONAI.has(herramienta)) {
+      return this.rechazo([
+        `Este proyecto usa el motor ${NOMBRE_MOTOR[this.motor]}: el video vive en ${CARPETA_COMPOSICION}/index.html y se cambia editando ese archivo ` +
+          '(lee leer_skill("hyperframes")). Las herramientas de piezas solo sirven con el motor MotionAI.',
+      ]);
+    }
     const copia = structuredClone(this.doc);
     let mensaje: string;
     try {
@@ -163,6 +225,15 @@ export class Estudio {
         ? [`Fuentes disponibles: ${catalogoFuentes().map((f) => f.familia).join(', ')}.`]
         : [];
       return this.rechazo([...v.errores, ...fuentes]);
+    }
+    if (this.motor !== 'motionai') {
+      this.doc = copia;
+      await writeFile(this.ruta, formatearJson(copia) + '\n');
+      this.mtime = statSync(this.ruta).mtimeMs;
+      const archivos = await hf.leerArchivos(this.composicion);
+      this.archivosGuardados = JSON.stringify(archivos);
+      const version = this.historial.guardar({ proyecto: copia, archivos } satisfies Guardado, herramienta, mensaje);
+      return { ok: true, version, mensaje };
     }
     let analisis: Analisis;
     try {
@@ -199,6 +270,8 @@ export class Estudio {
     const { ancho, alto } = dimensiones(p.ajustes);
     return {
       proyecto: { nombre: p.nombre, ruta: this.ruta, version: this.version },
+      motor: p.motor,
+      ...(p.motor !== 'motionai' ? { composicion: path.join(this.composicion, 'index.html') } : {}),
       formato: `${p.ajustes.formato} · ${ancho}×${alto} · ${p.ajustes.fps} fps`,
       duracion: duracionDe(p),
       escenas: p.escenas.map((e) => ({ id: e.id, nombre: e.nombre, inicio: e.inicio, fin: e.fin, piezas: e.hijos.length })),
@@ -217,6 +290,9 @@ export class Estudio {
     const out: string[] = [];
     const { ancho, alto } = dimensiones(p.ajustes);
     out.push(`${p.nombre} · ${p.ajustes.formato} ${ancho}×${alto} · ${p.ajustes.fps} fps · ${duracionDe(p)} s · versión ${this.version}`);
+    if (p.motor !== 'motionai') {
+      out.push(`Motor ${NOMBRE_MOTOR[p.motor]}: el video está en ${path.join(this.composicion, 'index.html')}.`);
+    }
     if (p.frases.length) {
       out.push('Frases:');
       p.frases.forEach((f, i) => out.push(`  f${i + 1} ${f.inicio}–${f.fin} s${f.subtitulo === false ? ' (sin subtítulo)' : ''}: ${f.texto}`));
@@ -482,6 +558,13 @@ export class Estudio {
       const larga = inicio + duracion > total + 0.05 ? ` Ojo: el audio termina en ${(inicio + duracion).toFixed(2)} s y el video dura ${total} s; ajusta la duración y las escenas.` : '';
       return `Cargué ${rel} como ${tipo} (${duracion.toFixed(2)} s)${detalle}.${larga}`;
     });
+    if (r.ok && this.motor !== 'motionai') {
+      // La composición solo ve sus propios archivos: el audio va también a composicion/assets/.
+      const destino = path.join(this.composicion, 'assets', path.basename(abs));
+      await mkdir(path.dirname(destino), { recursive: true });
+      if (!existsSync(destino)) await copyFile(abs, destino);
+      r.mensaje += ` En la composición está en assets/${path.basename(abs)}: agrégalo con <audio src="assets/${path.basename(abs)}" data-start="${inicio}" data-duration="${duracion.toFixed(2)}"${op.volumen !== undefined ? ` data-volume="${op.volumen}"` : ''}></audio> dentro de la raíz, y escribe los subtítulos tú con los tiempos de las frases.`;
+    }
     return { ...r, tramos, duracion, transcripcion };
   }
 
@@ -573,6 +656,16 @@ export class Estudio {
   }
 
   async verCuadro(tiempos: number[], op: OpcionesVista & { formato?: Formato } = {}): Promise<Buffer> {
+    if (this.motor !== 'motionai') {
+      await this.sincronizar();
+      const p = this.proyecto();
+      const dur = (await hf.duracionComposicion(this.composicion)) ?? duracionDe(p);
+      const ts = tiempos.map((t) => Math.max(0, Math.min(dur - 0.001, t)));
+      const { ancho, alto } = dimensiones(p.ajustes);
+      return hojaDeImagenes(await hf.cuadros(this.composicion, ts), ts.map((t) => `${t.toFixed(2)} s`), ancho, alto, {
+        ...op, formato: p.ajustes.formato, plataformas: p.ajustes.plataformas,
+      });
+    }
     let p = this.proyecto();
     if (op.formato) p = conFormato(p, op.formato);
     const { entorno } = await cargarRecursos({ proyecto: p, base: this.base });
@@ -592,6 +685,16 @@ export class Estudio {
   }
 
   private async exportarAhora(op: Parameters<Estudio['exportar']>[0] & object) {
+    if (this.motor !== 'motionai') {
+      await this.sincronizar();
+      const p = this.proyecto();
+      if (op.formato && op.formato !== p.ajustes.formato) throw new ErrorEstudio('Con HyperFrames se exporta en el formato de la composición; cambia el formato en la composición.');
+      const salida = op.salida ? path.resolve(this.base, op.salida) : rutaPorDefecto(p, this.base);
+      const inicio = Date.now();
+      await hf.renderizar(this.composicion, salida, { fps: p.ajustes.fps, crf: p.ajustes.exportar.calidad });
+      const segundos = (await hf.duracionComposicion(this.composicion)) ?? duracionDe(p);
+      return { salida, cuadros: Math.round(segundos * p.ajustes.fps), segundos, segundosRender: (Date.now() - inicio) / 1000 };
+    }
     let p = this.proyecto();
     if (op.formato) p = conFormato(p, op.formato);
     const { entorno, faltantes } = await cargarRecursos({ proyecto: p, base: this.base });
@@ -602,11 +705,37 @@ export class Estudio {
     return { ...r, segundosRender: (Date.now() - inicio) / 1000 };
   }
 
+  /** Revisa el video: reglas del motor propio, o la revisión de la composición con un motor externo. */
+  async revisar(): Promise<{ errores: string[]; avisos: string[] }> {
+    if (this.motor !== 'motionai') {
+      await this.sincronizar();
+      const r = await hf.revisar(this.composicion);
+      const p = this.proyecto();
+      const { ancho, alto } = dimensiones(p.ajustes);
+      const dur = (await hf.duracionComposicion(this.composicion)) ?? duracionDe(p);
+      const tiempos = Array.from({ length: Math.max(1, Math.ceil(dur / 0.25)) }, (_, i) => Math.min(dur - 0.01, i * 0.25 + 0.1));
+      const textos = await hf.medirTextos(this.composicion, tiempos, ancho, alto).catch(() => null);
+      if (!textos) r.avisos.push('No pude medir los textos (falta Chrome): no revisé las zonas de las plataformas.');
+      else {
+        const z = reglasDeTextos(textos, p.ajustes.plataformas, p.ajustes.formato, ancho, alto);
+        r.errores.push(...z.errores);
+        r.avisos.push(...z.avisos);
+      }
+      return r;
+    }
+    const p = this.proyecto();
+    const { entorno } = await cargarRecursos({ proyecto: p, base: this.base });
+    const a = analizar(p, entorno);
+    return { errores: a.errores.map(describir), avisos: a.avisos.map(describir) };
+  }
+
   /** Vuelve el documento a una versión anterior; eso también queda como versión nueva. */
   volverA(numero: number): Promise<Resultado> {
-    const doc = this.historial.leer(numero) as ProyectoEntrada | undefined;
-    if (!doc) return Promise.resolve(this.rechazo([`No existe la versión ${numero}.`]));
-    return this.aplicar('versiones', (d) => {
+    const leido = this.historial.leer(numero);
+    if (!leido) return Promise.resolve(this.rechazo([`No existe la versión ${numero}.`]));
+    const doc = (esGuardado(leido) ? leido.proyecto : leido) as ProyectoEntrada;
+    return this.aplicar('versiones', async (d) => {
+      if (esGuardado(leido)) await hf.escribirArchivos(this.composicion, leido.archivos);
       for (const k of Object.keys(d)) delete (d as unknown as Objeto)[k];
       Object.assign(d, structuredClone(doc));
       return `Volví a la versión ${numero}.`;

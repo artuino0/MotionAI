@@ -1,6 +1,6 @@
 # Plan · Estudio de motion con IA
 
-Oct 7, 2026 · @Arturo Munoz · revisión 2
+Oct 7, 2026 · @Arturo Munoz · revisión 3
 
 ## Resumen
 
@@ -22,6 +22,22 @@ La primera versión del plan estaba escrita alrededor de una forma de trabajar: 
 | El motor de papel recortado es el motor | El motor es genérico; papel recortado es uno de varios estilos |
 | La fase 1 es igualar el motor de Python | La fase 1 es el motor genérico; igualar el papel recortado es una prueba de un estilo |
 | Las reglas de Flow vienen en la tabla de reglas | Las reglas de marca viven en kits opcionales; Flow es un kit de ejemplo |
+
+## Revisión 3: el motor lo elige el usuario
+
+Claude es el que anima; la app no debe limitarlo a un solo motor. Cada proyecto elige con qué motor se escribe el video, y la app da lo mismo con cualquiera: chat con modelo y esfuerzo, monitor en vivo, voz con transcripción, revisión de reglas, historial de versiones y el MP4 en el formato del proyecto.
+
+| Motor | Qué escribe Claude | Cómo se renderiza | Para qué |
+| --- | --- | --- | --- |
+| MotionAI (el propio) | Piezas y animación en `proyecto.json`, por las herramientas MCP | Motor propio en Canvas (navegador y Node) | Piezas que se señalan con clic, reglas exactas, estilo papel recortado, render rápido |
+| HyperFrames (HeyGen, Apache 2.0) | HTML, CSS y GSAP en `composicion/`, con herramientas de archivos limitadas al proyecto | Chrome sin ventana, cuadro por cuadro, y ffmpeg | Todo lo que hace la web: tipografía, máscaras, 3D, Lottie, video |
+| Remotion | Componentes de React | `@remotion/renderer` | Quien ya trabaja en React; licencia de pago para empresas de 4 o más personas |
+
+- `proyecto.json` lleva `motor`. Con un motor externo guarda los ajustes (formato, fps, duración, plataformas), las frases y el audio; el video vive en la carpeta del motor.
+- Las herramientas que no aplican a un motor lo dicen y explican qué hacer en su lugar.
+- El historial guarda los archivos de texto de la composición en cada versión; volver a una versión los restaura.
+- Las reglas de plataforma (zonas tapadas, texto fuera del lienzo) se revisan midiendo las cajas de los textos en el navegador, igual que con el motor propio.
+- Orden: HyperFrames primero (núcleo y MCP, luego la app), Remotion después, y al final el instalador.
 
 ## La fuente de la verdad
 

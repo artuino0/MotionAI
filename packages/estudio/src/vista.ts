@@ -1,5 +1,5 @@
-import { Canvas } from 'skia-canvas';
-import { zonasTapadas } from '@motionai/documento';
+import { Canvas, loadImage } from 'skia-canvas';
+import { zonasTapadas, type Formato, type Plataforma } from '@motionai/documento';
 import { dibujarCuadro, escenaEn, type Entorno, type Escenario, type Registro } from '@motionai/motor';
 
 export interface OpcionesVista {
@@ -70,4 +70,43 @@ function dibujarZonas(ctx: CanvasRenderingContext2D, esc: Escenario) {
     }
   }
   ctx.restore();
+}
+
+/** La misma hoja, con cuadros que ya vienen como imágenes (de un motor externo). */
+export async function hojaDeImagenes(
+  imagenes: Buffer[], etiquetas: string[], ancho: number, alto: number,
+  op: OpcionesVista & { formato?: Formato; plataformas?: Plataforma[] } = {},
+): Promise<Buffer> {
+  const lado = op.lado ?? 560;
+  const k = lado / Math.max(ancho, alto);
+  const w = Math.round(ancho * k), h = Math.round(alto * k);
+  const cols = Math.min(imagenes.length, ancho > alto ? 2 : 3);
+  const filas = Math.ceil(imagenes.length / cols);
+  const pie = 34, margen = 12;
+  const hoja = new Canvas(cols * (w + margen) + margen, filas * (h + pie + margen) + margen);
+  const hc = hoja.getContext('2d');
+  hc.fillStyle = '#2a2d33';
+  hc.fillRect(0, 0, hoja.width, hoja.height);
+  for (let i = 0; i < imagenes.length; i++) {
+    const img = await loadImage(imagenes[i]!);
+    const x = margen + (i % cols) * (w + margen);
+    const y = margen + Math.floor(i / cols) * (h + pie + margen);
+    hc.drawImage(img, x, y, w, h);
+    if (op.zonas && op.formato) {
+      for (const p of op.plataformas ?? []) {
+        for (const z of zonasTapadas(p, op.formato)) {
+          hc.fillStyle = 'rgba(255,40,40,0.18)';
+          hc.fillRect(x + z.x * w, y + z.y * h, z.ancho * w, z.alto * h);
+          hc.strokeStyle = 'rgba(255,40,40,0.8)';
+          hc.lineWidth = 2;
+          hc.strokeRect(x + z.x * w, y + z.y * h, z.ancho * w, z.alto * h);
+        }
+      }
+    }
+    hc.fillStyle = '#e8e8ea';
+    hc.font = '600 20px sans-serif';
+    hc.textBaseline = 'middle';
+    hc.fillText(etiquetas[i] ?? '', x + 4, y + h + pie / 2);
+  }
+  return (await hoja.toBuffer('png')) as Buffer;
 }

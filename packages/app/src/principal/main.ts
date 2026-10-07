@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from 'electron';
-import type { Formato } from '@motionai/documento';
+import { CARPETA_COMPOSICION, type Formato } from '@motionai/documento';
 import { Estudio } from '@motionai/estudio';
 import { campanasDePen, leerPen } from '@motionai/importar';
 import { readFile } from 'node:fs/promises';
@@ -62,6 +62,9 @@ async function usar(e: Estudio): Promise<ProyectoAbierto> {
   chat = new Chat(e.base, {
     carpetaProyectos: e.base,
     cwd: e.base,
+    // Con HyperFrames, Claude escribe la composición con herramientas de archivos, solo dentro del proyecto.
+    archivos: e.motor !== 'motionai',
+    alTerminar: () => puerto.sincronizar(),
     socket,
     claude: process.env.MOTIONAI_CLAUDE,
     modelo: process.env.MOTIONAI_MODELO,
@@ -81,6 +84,13 @@ async function usar(e: Estudio): Promise<ProyectoAbierto> {
   return abierto()!;
 }
 
+/** Pone el runtime de HyperFrames al principio del <head>, como su vista previa: así el reproductor puede controlar la página. */
+function conRuntime(html: string): string {
+  const tag = '<script src="proyecto://local/__hyperframes/runtime.js"></script>';
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (h) => `${h}\n    ${tag}`);
+  return tag + html;
+}
+
 function carpetaLibre(nombre: string): string {
   const slug = nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'proyecto';
   let carpeta = path.join(carpetaProyectos(), slug);
@@ -92,7 +102,10 @@ function registrarIpc() {
   ipcMain.handle('claude:revisar', () => revisarClaude(process.env.MOTIONAI_CLAUDE));
   ipcMain.handle('recientes', () => recientes().listar());
   ipcMain.handle('proyecto:nuevo', async (_e, op: NuevoProyecto) =>
-    usar(await Estudio.crear({ carpeta: carpetaLibre(op.nombre), nombre: op.nombre, formato: op.formato as Formato, duracion: op.duracion, fps: op.fps })),
+    usar(await Estudio.crear({
+      carpeta: carpetaLibre(op.nombre), nombre: op.nombre, formato: op.formato as Formato, duracion: op.duracion, fps: op.fps,
+      motor: op.motor ?? 'motionai',
+    })),
   );
   ipcMain.handle('proyecto:abrir', async (_e, ruta?: string) => {
     if (!ruta) {
@@ -204,8 +217,15 @@ app.whenReady().then(async () => {
     const base = puerto.estudio?.base;
     if (!base) return new Response('Sin proyecto', { status: 404 });
     const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '');
+    // Runtime de HyperFrames para el reproductor del monitor (lo inyecta en cada HTML de la composición).
+    if (rel === '__hyperframes/runtime.js') {
+      return net.fetch(pathToFileURL(path.join(DIST, 'recursos/hyperframes/runtime.js')).toString());
+    }
     const archivo = path.resolve(base, rel);
     if (!archivo.startsWith(base + path.sep) || !existsSync(archivo)) return new Response('No existe', { status: 404 });
+    if (archivo.startsWith(path.join(base, CARPETA_COMPOSICION) + path.sep) && archivo.endsWith('.html')) {
+      return readFile(archivo, 'utf8').then((html) => new Response(conRuntime(html), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' } }));
+    }
     return net.fetch(pathToFileURL(archivo).toString());
   });
   socket = (await servirPuerto(puerto, rutaSocket())).ruta;

@@ -66,6 +66,8 @@ export const useEstudio = defineStore('estudio', {
     /** Cambia cada vez que hay que redibujar miniaturas. */
     revision: 0,
     tiempo: 0,
+    /** Escenas de una composición HTML (HyperFrames), según su reproductor. */
+    escenasHtml: [] as { id: string; inicio: number; fin: number }[],
     reproduciendo: false,
     seleccion: null as string | null,
     vista: 'limpia' as Vista,
@@ -94,10 +96,12 @@ export const useEstudio = defineStore('estudio', {
 
   getters: {
     duracion: (s) => s.escenario?.duracion ?? 0,
+    /** El video se escribe en HTML (HyperFrames): el monitor usa su reproductor. */
+    esHtml: (s) => s.proyecto?.motor === 'hyperframes',
     escenaActual: (s) => (s.escenario ? escenaEn(s.escenario, s.tiempo) : undefined),
     respondiendo: (s) => s.turnos.some((x) => x.enCurso),
     /** Hay algo que exportar: al menos una pieza en alguna escena. */
-    tieneContenido: (s) => !!s.proyecto?.escenas.some((e) => e.hijos.length),
+    tieneContenido: (s) => (s.proyecto?.motor === 'hyperframes' ? s.escenasHtml.length > 0 : !!s.proyecto?.escenas.some((e) => e.hijos.length)),
   },
 
   actions: {
@@ -222,7 +226,30 @@ export const useEstudio = defineStore('estudio', {
         this.errorDocumento = (e as Error).message;
       }
       this.revision++;
-      if (this.respondiendo) this.seguirCambio(anterior, doc);
+      if (r.proyecto.motor === 'hyperframes') await this.leerEscenasHtml(version);
+      else if (this.respondiendo) this.seguirCambio(anterior, doc);
+    },
+
+    /** Escenas de una composición HTML: los hijos de la raíz con data-start y data-duration. */
+    async leerEscenasHtml(version: number) {
+      try {
+        const html = await (await fetch(`proyecto://local/composicion/index.html?v=${version}`)).text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const raiz = doc.querySelector('[data-composition-id]');
+        const hijos = Array.from(raiz?.children ?? []).filter((el) => el.hasAttribute('data-start') && el.hasAttribute('data-duration') && el.tagName !== 'AUDIO' && el.tagName !== 'VIDEO');
+        // La guía pide marcar las escenas con class="escena"; si no hay ninguna marcada, cuenta todo lo que tiene tiempo.
+        const marcadas = hijos.filter((el) => el.classList.contains('escena') || el.classList.contains('scene'));
+        const escenas = (marcadas.length ? marcadas : hijos)
+          .map((el, i) => {
+            const inicio = Number(el.getAttribute('data-start')), dur = Number(el.getAttribute('data-duration'));
+            return { id: el.id || `escena-${i + 1}`, inicio, fin: inicio + dur };
+          })
+          .filter((x) => Number.isFinite(x.inicio) && Number.isFinite(x.fin))
+          .sort((a, b) => a.inicio - b.inicio);
+        this.escenasHtml = escenas;
+      } catch {
+        this.escenasHtml = [];
+      }
     },
 
     /** Mientras Claude trabaja, lleva el monitor a la pieza que cambió y la marca un momento. */
@@ -337,7 +364,13 @@ export const useEstudio = defineStore('estudio', {
       this.referir({ tipo: 'pieza', id: ruta, nombre: this.nombre(ruta), escena, t: Math.round(this.tiempo * 100) / 100, ...(punto ? { punto } : {}) });
     },
 
-    quitarReferencia(i: number) {
+    /** Señala un punto del monitor en el momento actual (en una composición HTML no hay piezas medidas). */
+    senalarMomento(punto: [number, number]) {
+      const t = Math.round(this.tiempo * 100) / 100;
+      this.referir({ tipo: 'tiempo', id: `${t}`, t, punto });
+    },
+
+        quitarReferencia(i: number) {
       this.referencias.splice(i, 1);
       this.informar();
     },

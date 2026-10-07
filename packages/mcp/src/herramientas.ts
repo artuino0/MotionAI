@@ -5,14 +5,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import {
-  CICLOS, CURVAS, ENTRADAS, FORMATO_IDS, NodoEsquema, PLATAFORMAS, SALIDAS,
+  CICLOS, CURVAS, ENTRADAS, FORMATO_IDS, MOTORES, NodoEsquema, PLATAFORMAS, SALIDAS,
   type Componente, type Formato, type Frase, type Nodo,
 } from '@motionai/documento';
 import { catalogoFuentes, type Resultado } from '@motionai/estudio';
 import type { PuertoEstudio } from './puerto.js';
 
 /** Carpeta con las guías (inicio.md, diseno.md, documento.md). La app empaquetada la indica con MOTIONAI_GUIAS. */
-function guia(tema: 'inicio' | 'diseno' | 'documento'): string {
+function guia(tema: 'inicio' | 'diseno' | 'documento' | 'hyperframes'): string {
   const dir = process.env.MOTIONAI_GUIAS;
   if (dir) return path.join(dir, `${tema}.md`);
   const aqui = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,9 @@ function guia(tema: 'inicio' | 'diseno' | 'documento'): string {
 
 export const INSTRUCCIONES =
   'Herramientas de MotionAI para hacer motion graphics. Antes de empezar llama leer_skill con tema "inicio": ' +
-  'explica cómo trabajar, el formato del documento y cómo revisar tu trabajo.';
+  'explica cómo trabajar, el formato del documento y cómo revisar tu trabajo. Cada proyecto tiene un motor (leer_estado lo dice): ' +
+  'con "motionai" el video se arma con las herramientas de piezas; con "hyperframes" se escribe en HTML en la carpeta composicion/ ' +
+  '(lee leer_skill con tema "hyperframes").';
 
 const texto = (t: string, error = false): CallToolResult => ({ content: [{ type: 'text', text: t }], ...(error ? { isError: true } : {}) });
 
@@ -41,7 +43,7 @@ function validarPieza(p: unknown, donde = 'pieza'): Nodo {
 }
 
 /** Envuelve un manejador para que los errores lleguen a Claude como texto y no como fallas del protocolo. */
-function seguro<A>(f: (args: A) => Promise<CallToolResult> | CallToolResult) {
+function seguroBase<A>(f: (args: A) => Promise<CallToolResult> | CallToolResult) {
   return async (args: A): Promise<CallToolResult> => {
     try {
       return await f(args);
@@ -59,14 +61,23 @@ const PIEZA = z
   );
 
 export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void {
+  // Con un motor externo, Claude edita archivos entre llamada y llamada: antes de cada herramienta se guarda
+  // una versión con lo que cambió, para que el historial y el monitor lo vean.
+  const seguro = <A,>(f: (args: A) => Promise<CallToolResult> | CallToolResult) =>
+    seguroBase(async (a: A) => {
+      await p.sincronizar().catch(() => undefined);
+      return f(a);
+    });
+
   server.registerTool(
     'leer_skill',
     {
       title: 'Leer guía',
       description:
         'Guías para trabajar en la app. Temas: "inicio" (cómo trabajar; léelo primero), "diseno" (principios de motion y recetas), ' +
-        '"documento" (formato exacto de piezas, animación y tiempos), "fuentes" (fuentes disponibles).',
-      inputSchema: { tema: z.enum(['inicio', 'diseno', 'documento', 'fuentes']).default('inicio') },
+        '"documento" (formato exacto de piezas, animación y tiempos), "fuentes" (fuentes disponibles), ' +
+        '"hyperframes" (cómo escribir el video en HTML cuando el proyecto usa el motor HyperFrames).',
+      inputSchema: { tema: z.enum(['inicio', 'diseno', 'documento', 'fuentes', 'hyperframes']).default('inicio') },
       annotations: { readOnlyHint: true },
     },
     seguro(({ tema }) => {
@@ -126,9 +137,13 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
     'nuevo_proyecto',
     {
       title: 'Nuevo proyecto',
-      description: 'Crea un proyecto vacío con una sola escena que dura todo el video, y lo deja abierto.',
+      description:
+        'Crea un proyecto vacío y lo deja abierto. motor "motionai" (por defecto): una escena que dura todo el video y piezas con las ' +
+        'herramientas. motor "hyperframes": una composición HTML vacía en composicion/index.html que tú escribes (HTML, CSS y animaciones ' +
+        'WAAPI); úsalo si el usuario lo pide o si el video necesita algo que solo da la web.',
       inputSchema: {
         nombre: z.string().min(1),
+        motor: z.enum(MOTORES).default('motionai'),
         formato: z.enum(FORMATO_IDS).default('9:16').describe('9:16 TikTok/Reels/Shorts, 4:5 feed, 1:1, 16:9 YouTube, o libre con ancho y alto'),
         duracion: z.number().positive().max(180).default(15).describe('Segundos'),
         fps: z.union([z.literal(24), z.literal(25), z.literal(30), z.literal(60)]).default(30),
@@ -363,6 +378,26 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
       }
       if (r.campanas?.length && a.modo !== 'campana') (base.content[0] as { text: string }).text += `\nEl archivo trae campañas: ${r.campanas.join(', ')} (modo "campana" las importa completas).`;
       return base;
+    }),
+  );
+
+  server.registerTool(
+    'revisar',
+    {
+      title: 'Revisar el video',
+      description:
+        'Revisa el video completo y devuelve errores y avisos: textos bajo la interfaz de las plataformas, fuera del lienzo o muy chicos, ' +
+        'y con HyperFrames también errores de la composición (estructura, tiempos, contraste). Úsalo antes de dar el video por terminado.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    seguro(async () => {
+      const r = await p.revisar();
+      if (!r.errores.length && !r.avisos.length) return texto('✓ Sin errores ni avisos.');
+      const partes: string[] = [];
+      if (r.errores.length) partes.push(`Errores (arréglalos):\n- ${r.errores.join('\n- ')}`);
+      if (r.avisos.length) partes.push(`Avisos:\n- ${r.avisos.join('\n- ')}`);
+      return texto(partes.join('\n'), false);
     }),
   );
 

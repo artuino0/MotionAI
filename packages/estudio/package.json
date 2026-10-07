@@ -11,6 +11,8 @@
     "@motionai/importar": "workspace:*",
     "@motionai/motor": "workspace:*",
     "@motionai/render": "workspace:*",
+    "hyperframes": "0.8.140",
+    "puppeteer-core": "^25.12.0",
     "skia-canvas": "^3.0.0"
   }
 }

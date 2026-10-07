@@ -153,6 +153,13 @@ onBeforeUnmount(() => { obs?.disconnect(); removeEventListener('mouseup', soltar
             <img v-if="minis[s.id]" :src="minis[s.id]" alt="" />
             <span>{{ nombreEscena(e.proyecto, s.id) }}</span>
           </button>
+          <button
+            v-for="(s, i) in e.esHtml ? e.escenasHtml : []" :key="s.id" class="clip escena"
+            :class="{ actual: e.tiempo >= s.inicio && e.tiempo < s.fin }"
+            :style="{ left: IZQ + x(s.inicio) + 'px', width: x(s.fin - s.inicio) + 'px' }" @click="irA(s.inicio)"
+          >
+            <span>{{ t('medios.escenaN', { n: i + 1 }) }}</span>
+          </button>
         </div>
 
         <div v-if="musica" class="pista">

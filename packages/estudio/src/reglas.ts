@@ -1,5 +1,5 @@
 import { Canvas } from 'skia-canvas';
-import { zonasTapadas, type Proyecto } from '@motionai/documento';
+import { zonasTapadas, type Formato, type Plataforma, type Proyecto } from '@motionai/documento';
 import { dibujarCuadro, maquetarSubtitulo, preparar, type Entorno, type Escenario, type Registro } from '@motionai/motor';
 
 /** Una regla que no se cumple. Los errores rechazan el cambio; los avisos solo se reportan. */
@@ -164,3 +164,39 @@ export function analizar(proyecto: Proyecto, entorno: Entorno): Analisis {
 
 /** Clave para saber si un hallazgo ya existía antes de un cambio. */
 export const claveHallazgo = (h: Hallazgo) => `${h.regla}|${h.pieza ?? ''}|${h.mensaje.replace(/\d+(\.\d+)?/g, '#')}`;
+
+/**
+ * Reglas de plataforma con textos medidos fuera del motor propio (por ejemplo, en una composición HTML):
+ * texto en reposo bajo una zona tapada o fuera del lienzo (errores) y texto chico (aviso).
+ */
+export function reglasDeTextos(
+  textos: { id: string; texto: string; t: number; caja: [number, number, number, number]; tamano: number; quieto: boolean }[],
+  plataformas: Plataforma[], formato: Formato, ancho: number, alto: number,
+): { errores: string[]; avisos: string[] } {
+  const lienzo: Caja = [0, 0, ancho, alto];
+  const k = Math.min(ancho, alto) / 1080;
+  const zonas = plataformas.flatMap((p) => zonasTapadas(p, formato).map((z) => ({
+    motivo: z.motivo, caja: [z.x * ancho, z.y * alto, (z.x + z.ancho) * ancho, (z.y + z.alto) * alto] as Caja,
+  })));
+  const errores = new Map<string, string>(), avisos = new Map<string, string>();
+  const nombre = (x: { id: string; texto: string }) => `"${x.texto}"${x.id ? ` (${x.id})` : ''}`;
+  for (const x of textos) {
+    const c = x.caja as Caja;
+    const a = area(c);
+    if (a <= 0) continue;
+    if (x.quieto) {
+      for (const z of zonas) {
+        if (area(interseccion(c, z.caja)) > a * 0.05 && !errores.has(`zona:${x.id}:${x.texto}:${z.motivo}`)) {
+          errores.set(`zona:${x.id}:${x.texto}:${z.motivo}`, `[zona-tapada] El texto ${nombre(x)} queda bajo la ${z.motivo} en ${seg(x.t)} (ocupa ${px(c)}; la zona es ${px(z.caja)}).`);
+        }
+      }
+      if (area(interseccion(c, lienzo)) < a * 0.95 && !errores.has(`fuera:${x.id}:${x.texto}`)) {
+        errores.set(`fuera:${x.id}:${x.texto}`, `[fuera-del-lienzo] El texto ${nombre(x)} se sale del lienzo en ${seg(x.t)} (ocupa ${px(c)}; el lienzo es ${ancho}×${alto}).`);
+      }
+      if (x.tamano < 28 * k && !avisos.has(`chico:${x.id}:${x.texto}`)) {
+        avisos.set(`chico:${x.id}:${x.texto}`, `[texto-chico] El texto ${nombre(x)} se ve de ${Math.round(x.tamano)} px; en el teléfono se lee mal por debajo de ${Math.round(28 * k)} px.`);
+      }
+    }
+  }
+  return { errores: [...errores.values()], avisos: [...avisos.values()] };
+}

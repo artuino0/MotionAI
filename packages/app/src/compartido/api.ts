@@ -66,6 +66,8 @@ export interface NuevoProyecto {
   formato: '9:16' | '4:5' | '1:1' | '16:9';
   duracion: number;
   fps: 24 | 25 | 30 | 60;
+  /** Con qué se escribe el video: el motor propio o HyperFrames (HTML). */
+  motor?: 'motionai' | 'hyperframes';
 }
 
 export interface ApiMotionAI {

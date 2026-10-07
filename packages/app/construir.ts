@@ -37,8 +37,16 @@ await vite({ configFile: path.join(AQUI, 'vite.config.ts'), logLevel: 'warn' });
 
 await cp(path.join(RAIZ, 'packages/estudio/fuentes'), path.join(DIST, 'recursos/fuentes'), { recursive: true });
 await mkdir(path.join(DIST, 'recursos/guias'), { recursive: true });
+// Runtime de HyperFrames: el monitor lo inyecta en la composición para controlarla.
+{
+  const { createRequire } = await import('node:module');
+  const hf = path.dirname(createRequire(import.meta.url).resolve('hyperframes/package.json'));
+  await mkdir(path.join(DIST, 'recursos/hyperframes'), { recursive: true });
+  await cp(path.join(hf, 'dist/hyperframe.runtime.iife.js'), path.join(DIST, 'recursos/hyperframes/runtime.js'));
+}
 await cp(path.join(RAIZ, 'packages/mcp/skill/inicio.md'), path.join(DIST, 'recursos/guias/inicio.md'));
 await cp(path.join(RAIZ, 'packages/mcp/skill/diseno.md'), path.join(DIST, 'recursos/guias/diseno.md'));
+await cp(path.join(RAIZ, 'packages/mcp/skill/hyperframes.md'), path.join(DIST, 'recursos/guias/hyperframes.md'));
 await cp(path.join(RAIZ, 'docs/documento.md'), path.join(DIST, 'recursos/guias/documento.md'));
 // En desarrollo, si hay whisper.cpp (MOTIONAI_WHISPER y MOTIONAI_WHISPER_MODELO), se copia a recursos/whisper.
 // El instalador de la fase 5 lo incluye siempre.
