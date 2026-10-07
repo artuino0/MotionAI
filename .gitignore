@@ -4,3 +4,4 @@ salida/
 *.log
 .DS_Store
 proyectos/
+.impeccable/live/
