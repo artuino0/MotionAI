@@ -12,6 +12,8 @@ import { Recientes } from './recientes.js';
 const DIST = path.dirname(fileURLToPath(import.meta.url));
 process.env.MOTIONAI_FUENTES ??= path.join(DIST, 'recursos/fuentes');
 process.env.MOTIONAI_GUIAS ??= path.join(DIST, 'recursos/guias');
+// whisper.cpp va en recursos/whisper (el instalador lo incluye); MOTIONAI_WHISPER lo reemplaza en desarrollo.
+process.env.MOTIONAI_RECURSOS ??= path.join(DIST, 'recursos');
 
 // proyecto://local/<ruta> sirve archivos de la carpeta del proyecto abierto (fuentes, imágenes, audio).
 protocol.registerSchemesAsPrivileged([
@@ -108,6 +110,21 @@ function registrarIpc() {
   ipcMain.handle('versiones:volver', (_e, n: number) => puerto.volverA(n));
   ipcMain.handle('exportar', (_e, op: { formato?: Formato }) => puerto.exportar(op));
   ipcMain.handle('archivo:mostrar', (_e, ruta: string) => shell.showItemInFolder(ruta));
+  ipcMain.handle('audio:cargar', async (_e, tipo: 'voz' | 'musica') => {
+    const e = puerto.estudio;
+    if (!e) throw new Error(idioma === 'en' ? 'No project is open.' : 'No hay un proyecto abierto.');
+    const r = await dialog.showOpenDialog(ventana!, {
+      title: idioma === 'en' ? (tipo === 'voz' ? 'Choose the voice-over' : 'Choose the music') : tipo === 'voz' ? 'Elige la voz' : 'Elige la música',
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'] }],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const res = await puerto.audio({ archivo: r.filePaths[0], tipo });
+    return {
+      ok: res.ok, mensaje: res.mensaje, errores: res.errores, transcripcion: res.transcripcion,
+      frases: res.ok ? (puerto.estudio?.documento.frases?.length ?? 0) : undefined,
+    };
+  });
   ipcMain.handle('archivo:abrir', async (_e, ruta: string) => {
     const error = await shell.openPath(ruta);
     if (error) throw new Error(error);

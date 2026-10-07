@@ -27,7 +27,7 @@ export interface Cambio {
   mensaje: string;
 }
 
-export type ResultadoAudio = Resultado & { tramos?: Tramo[]; duracion?: number };
+export type ResultadoAudio = Resultado & { tramos?: Tramo[]; duracion?: number; transcripcion?: 'whisper' | 'sin-whisper' | 'dada' | 'no' };
 export interface ResultadoExportar { salida: string; cuadros: number; segundos: number; segundosRender: number }
 export interface OpcionesNuevo {
   nombre: string;
@@ -56,7 +56,7 @@ export interface PuertoEstudio {
   cambiar(cambios: ({ id: string } & Record<string, unknown>)[]): Promise<Resultado>;
   quitarPieza(ids: string[]): Promise<Resultado>;
   escenas(op: Parameters<Estudio['escenas']>[0]): Promise<Resultado>;
-  audio(op: { archivo: string; tipo?: 'voz' | 'musica'; inicio?: number; volumen?: number; frases?: Frase[] }): Promise<ResultadoAudio>;
+  audio(op: { archivo: string; tipo?: 'voz' | 'musica'; inicio?: number; volumen?: number; frases?: Frase[]; transcribir?: boolean; idioma?: string }): Promise<ResultadoAudio>;
   buscarBiblioteca(texto?: string, tipo?: string): Promise<Componente[]>;
   verCuadro(tiempos: number[], op: { zonas?: boolean; resaltar?: string[]; formato?: Formato; lado?: number }): Promise<Buffer>;
   exportar(op: { salida?: string; formato?: Formato; desde?: number; hasta?: number }): Promise<ResultadoExportar>;

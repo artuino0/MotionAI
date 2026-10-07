@@ -116,7 +116,16 @@ const entradaDe = (id: string) => e.escenario?.escenas.flatMap((x) => x.hijos).f
       </template>
 
       <template v-else>
-        <p v-if="!e.proyecto?.frases.length" class="tenue vacio">{{ t('medios.frasesVacia') }}</p>
+        <div class="audio">
+          <button :disabled="!!e.cargandoAudio || e.respondiendo" @click="e.cargarAudio('voz')">
+            <Icono nombre="mic" :tam="14" /> {{ e.cargandoAudio === 'voz' ? t('medios.transcribiendo') : t('medios.cargarVoz') }}
+          </button>
+          <button :disabled="!!e.cargandoAudio || e.respondiendo" @click="e.cargarAudio('musica')">
+            <Icono nombre="music" :tam="14" /> {{ e.cargandoAudio === 'musica' ? t('medios.cargando') : t('medios.cargarMusica') }}
+          </button>
+        </div>
+        <p v-if="e.cargandoAudio === 'voz'" class="tenue vacio" role="status"><span class="punto" aria-hidden="true" /> {{ t('medios.transcribiendo') }}</p>
+        <p v-else-if="!e.proyecto?.frases.length" class="tenue vacio">{{ t('medios.frasesVacia') }}</p>
         <ul class="frases">
           <li v-for="(f, i) in e.proyecto?.frases" :key="i">
             <button class="frase" @click="e.pausar(); e.irA(f.inicio)">
@@ -159,6 +168,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 .componente { padding: 10px; border: 1px solid var(--borde); border-radius: var(--radio-chico); margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
 .componente strong { display: flex; gap: 6px; align-items: center; }
 .frases { display: flex; flex-direction: column; gap: 4px; }
+.audio { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.audio button { justify-content: flex-start; }
+.punto { width: 7px; height: 7px; border-radius: 50%; background: var(--acento); display: inline-block; animation: latido 1.1s infinite; }
 .frase { width: 100%; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; background: none; border-color: transparent; text-align: left; }
 .frase:hover:not(:disabled) { background: var(--panel-2); border-color: var(--borde); }
 </style>

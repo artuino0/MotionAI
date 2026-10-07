@@ -295,24 +295,36 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
     {
       title: 'Voz y música',
       description:
-        'Carga un audio (lo copia a recursos/). Con tipo "voz" devuelve los tramos con habla separados por pausas; luego vuelve a llamar ' +
-        'con `frases` [{inicio, fin, texto, subtitulo?}] para poner el texto de cada tramo (subtitulo: false si la frase ya va en un letrero). ' +
+        'Carga un audio (lo copia a recursos/). Con tipo "voz" la app lo transcribe sola (whisper.cpp, local) y arma las frases ' +
+        'con los tiempos exactos de las pausas: revisa el texto (nombres de marca, acentos, palabras juntas) y, si algo está mal, ' +
+        'corrígelo llamando otra vez con `frases`. Pon subtitulo: false en la frase que ya vaya escrita en un letrero. ' +
+        'Si la transcripción no está instalada, devuelve los tramos con voz y tú pones el texto con `frases`. ' +
         'Con tipo "musica" solo la carga.',
       inputSchema: {
         archivo: z.string().describe('Ruta al audio (relativa al proyecto o absoluta)'),
         tipo: z.enum(['voz', 'musica']).default('voz'),
         inicio: z.number().nonnegative().default(0).describe('Segundo del proyecto en que empieza a sonar'),
         volumen: z.number().min(0).max(2).default(1),
-        frases: z.array(z.object({ inicio: z.number(), fin: z.number(), texto: z.string(), subtitulo: z.boolean().optional() })).optional(),
+        frases: z.array(z.object({ inicio: z.number(), fin: z.number(), texto: z.string(), subtitulo: z.boolean().optional() })).optional()
+          .describe('Frases en segundos del proyecto. Si las das, no se transcribe.'),
+        idioma: z.string().default('auto').describe('Idioma de la voz para la transcripción: auto, es, en…'),
       },
     },
     seguro(async (a) => {
       const r = await p.audio({ ...a, frases: a.frases as Frase[] | undefined });
       const base = respuesta(r);
-      if (r.ok && r.tramos) {
-        const lista = r.tramos.map((t, i) => `  ${i + 1}. ${t.inicio}–${t.fin} s`).join('\n');
-        (base.content[0] as { text: string }).text += `\nDuración ${r.duracion?.toFixed(2)} s. Tramos con voz (del audio; suma "inicio" para tiempos del proyecto):\n${lista}`;
+      if (!r.ok) return base;
+      const extra: string[] = [`Duración ${r.duracion?.toFixed(2)} s.`];
+      if (r.transcripcion === 'whisper') {
+        const doc = await p.documento();
+        extra.push('Frases transcritas (segundos del proyecto). Revisa el texto y corrige con `frases` si hace falta:');
+        (doc.frases ?? []).forEach((f, i) => extra.push(`  f${i + 1} ${f.inicio}–${f.fin} s: ${f.texto}`));
+      } else if (r.tramos) {
+        if (r.transcripcion === 'sin-whisper') extra.push('La transcripción no está instalada en esta computadora: pon el texto de cada tramo con `frases`.');
+        extra.push('Tramos con voz (segundos del audio; suma "inicio" para tiempos del proyecto):');
+        r.tramos.forEach((t, i) => extra.push(`  ${i + 1}. ${t.inicio}–${t.fin} s`));
       }
+      (base.content[0] as { text: string }).text += `\n${extra.join('\n')}`;
       return base;
     }),
   );

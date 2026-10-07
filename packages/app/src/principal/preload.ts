@@ -21,6 +21,7 @@ const api: ApiMotionAI = {
   exportar: (op) => ipcRenderer.invoke('exportar', op ?? {}),
   mostrarArchivo: (r) => ipcRenderer.invoke('archivo:mostrar', r),
   abrirArchivo: (r) => ipcRenderer.invoke('archivo:abrir', r),
+  cargarAudio: (tipo) => ipcRenderer.invoke('audio:cargar', tipo),
   idioma: (i) => ipcRenderer.send('idioma', i),
   chat: () => ipcRenderer.invoke('chat'),
   enviar: (t, r) => ipcRenderer.invoke('chat:enviar', t, r),

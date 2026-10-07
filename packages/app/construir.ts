@@ -40,4 +40,12 @@ await mkdir(path.join(DIST, 'recursos/guias'), { recursive: true });
 await cp(path.join(RAIZ, 'packages/mcp/skill/inicio.md'), path.join(DIST, 'recursos/guias/inicio.md'));
 await cp(path.join(RAIZ, 'packages/mcp/skill/diseno.md'), path.join(DIST, 'recursos/guias/diseno.md'));
 await cp(path.join(RAIZ, 'docs/documento.md'), path.join(DIST, 'recursos/guias/documento.md'));
+// En desarrollo, si hay whisper.cpp (MOTIONAI_WHISPER y MOTIONAI_WHISPER_MODELO), se copia a recursos/whisper.
+// El instalador de la fase 5 lo incluye siempre.
+const { MOTIONAI_WHISPER: whisper, MOTIONAI_WHISPER_MODELO: modelo } = process.env;
+if (whisper && modelo) {
+  await mkdir(path.join(DIST, 'recursos/whisper'), { recursive: true });
+  await cp(whisper, path.join(DIST, 'recursos/whisper', path.basename(whisper)));
+  await cp(modelo, path.join(DIST, 'recursos/whisper', path.basename(modelo)));
+}
 console.log('✓ App construida en', path.relative(process.cwd(), DIST) || DIST);

@@ -49,7 +49,7 @@ Para ver el resultado mientras Claude trabaja: `pnpm visor` y abre `http://local
 | `quitar_pieza` | Saca piezas o componentes sin usar |
 | `buscar_biblioteca` | Componentes por texto o tipo |
 | `escenas` | Crear, quitar, partir y mover cortes |
-| `voz` | Carga voz o música; con voz detecta los tramos con habla por pausas y pone las frases |
+| `voz` | Carga voz o música; la voz se transcribe con whisper.cpp (local) y se arma en frases con los tiempos de las pausas |
 | `ver_cuadro` | Hoja de 1 a 6 cuadros reducidos, con zonas tapadas y piezas resaltadas si se pide |
 | `exportar` | MP4 con el mismo motor del previo |
 | `versiones` | Lista el historial o vuelve a una versión |
@@ -77,3 +77,18 @@ Las reglas se revisan con el motor: se recorre el video cada 0.2 s midiendo dón
 `lanzarAgente` (en `packages/mcp/src/agente.ts`) es el puente que usará la app: lanza `claude -p` con el servidor MCP, `--tools ""` (sin archivos, terminal ni web) y `--allowedTools mcp__motionai`, continúa la sesión del proyecto con `--resume` y traduce la salida en streaming a eventos (`inicio`, `texto`, `herramienta`, `resultado`, `fin`).
 
 La prueba de cierre de la fase 2 lo usa: `pnpm fase2 ["brief"]` deja el proyecto, el MP4, una hoja de cuadros y la bitácora de lo que hizo Claude en `salida/fase2/`.
+
+## Transcripción de la voz
+
+La voz se transcribe en la computadora con [whisper.cpp](https://github.com/ggml-org/whisper.cpp): sin API ni costo. Los cortes de frase salen de las pausas del audio (ffmpeg `silencedetect`) y el texto de whisper, palabra por palabra, se reparte entre esos tramos; los fragmentos cortos o que terminan en coma se unen al siguiente. Con la voz de Flow Sites salen las mismas 9 frases que el `.pen`, con los mismos tiempos.
+
+El servidor busca whisper así: `MOTIONAI_WHISPER` (binario `whisper-cli`) y `MOTIONAI_WHISPER_MODELO` (`ggml-small.bin` o `ggml-base.bin`), o la carpeta `MOTIONAI_RECURSOS/whisper`. La app la incluye en `dist/recursos/whisper` (en desarrollo, `pnpm --filter @motionai/app construir` la copia si esas variables existen). Sin whisper, `voz` devuelve los tramos y Claude escribe el texto.
+
+Para compilarlo (binario estático, sin librerías aparte):
+
+```bash
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp && cd whisper.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF
+cmake --build build -j --target whisper-cli
+curl -L -o ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+```

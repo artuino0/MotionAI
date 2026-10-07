@@ -5,3 +5,4 @@ export { Historial, type Version } from './historial.js';
 export { hojaDeCuadros, type OpcionesVista } from './vista.js';
 export { tramosDeVoz, duracionAudio, type Tramo } from './voz.js';
 export { formatearJson } from './json.js';
+export { transcribir, armarFrases, encontrarWhisper, type Palabra, type Whisper } from './transcribir.js';

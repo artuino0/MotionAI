@@ -86,6 +86,7 @@ export const useEstudio = defineStore('estudio', {
     seguirAClaude: true,
     /** Versiones a las que se puede regresar con Ctrl+Shift+Z. */
     rehacer: [] as number[],
+    cargandoAudio: null as 'voz' | 'musica' | null,
   }),
 
   getters: {
@@ -398,6 +399,28 @@ export const useEstudio = defineStore('estudio', {
         this.avisar(t('aviso.exportFallo', { error: (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }), 'error');
       } finally {
         this.exportando = null;
+      }
+    },
+
+    /** Elige un audio y lo carga; la voz se transcribe en la computadora (puede tardar unos segundos). */
+    async cargarAudio(tipo: 'voz' | 'musica') {
+      if (this.respondiendo) { this.avisar(t('aviso.esperaClaude')); return; }
+      this.cargandoAudio = tipo;
+      try {
+        const r = await api().cargarAudio(tipo);
+        if (!r) return;
+        if (!r.ok) this.avisar((r.errores ?? [r.mensaje]).join('\n'), 'error');
+        else if (tipo === 'musica') this.avisar(t('aviso.musicaLista'), 'ok');
+        else if (r.transcripcion === 'whisper') this.avisar(t('aviso.vozLista', { n: r.frases ?? 0 }), 'ok', { detalle: t('aviso.vozListaDetalle') });
+        else this.avisar(t('aviso.vozSinTranscribir'), 'info');
+        const fin = Math.max(0, ...(this.proyecto?.frases.map((f) => f.fin) ?? []));
+        if (tipo === 'voz' && fin > this.duracion + 0.05) {
+          this.avisar(t('aviso.vozLarga', { voz: fin.toFixed(1), video: this.duracion.toFixed(1) }), 'info', { acciones: [{ texto: t('barra.ajustes'), hacer: () => (this.verAjustes = true) }] });
+        }
+      } catch (e) {
+        this.avisar((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
+      } finally {
+        this.cargandoAudio = null;
       }
     },
 

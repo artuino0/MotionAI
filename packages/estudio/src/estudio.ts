@@ -13,6 +13,7 @@ import { Historial, type Version } from './historial.js';
 import { formatearJson } from './json.js';
 import { analizar, claveHallazgo, type Analisis, type Hallazgo } from './reglas.js';
 import { hojaDeCuadros, type OpcionesVista } from './vista.js';
+import { armarFrases, encontrarWhisper, transcribir } from './transcribir.js';
 import { duracionAudio, tramosDeVoz, type Tramo } from './voz.js';
 
 export interface Resultado {
@@ -436,7 +437,14 @@ export class Estudio {
   }
 
   /** Carga un audio de voz o música (lo copia a recursos/) y, si se dan, pone las frases. */
-  async audio(op: { archivo: string; tipo?: 'voz' | 'musica'; inicio?: number; volumen?: number; frases?: Frase[] }): Promise<Resultado & { tramos?: Tramo[]; duracion?: number }> {
+  /**
+   * Carga un audio de voz o música (lo copia a recursos/). Con voz y sin frases dadas, la transcribe con
+   * whisper.cpp si está instalado y arma las frases con los tiempos de las pausas.
+   */
+  async audio(op: {
+    archivo: string; tipo?: 'voz' | 'musica'; inicio?: number; volumen?: number; frases?: Frase[];
+    transcribir?: boolean; idioma?: string;
+  }): Promise<Resultado & { tramos?: Tramo[]; duracion?: number; transcripcion?: 'whisper' | 'sin-whisper' | 'dada' | 'no' }> {
     const tipo = op.tipo ?? 'voz';
     const origen = path.resolve(this.base, op.archivo);
     if (!existsSync(origen)) return this.rechazo([`No existe el archivo ${op.archivo}`]);
@@ -447,16 +455,31 @@ export class Estudio {
       await mkdir(path.join(this.base, 'recursos'), { recursive: true });
       await copyFile(origen, path.join(this.base, rel));
     }
-    const duracion = await duracionAudio(path.join(this.base, rel));
-    const tramos = tipo === 'voz' ? await tramosDeVoz(path.join(this.base, rel)) : undefined;
+    const abs = path.join(this.base, rel);
+    const duracion = await duracionAudio(abs);
+    const inicio = op.inicio ?? 0;
+    const tramos = tipo === 'voz' ? await tramosDeVoz(abs) : undefined;
+    let frases = op.frases;
+    let transcripcion: 'whisper' | 'sin-whisper' | 'dada' | 'no' = frases ? 'dada' : 'no';
+    if (tipo === 'voz' && !frases && op.transcribir !== false) {
+      const w = encontrarWhisper();
+      if (w) {
+        const { palabras } = await transcribir(abs, w, op.idioma ?? 'auto');
+        frases = armarFrases(palabras, tramos ?? [], inicio);
+        transcripcion = 'whisper';
+      } else transcripcion = 'sin-whisper';
+    }
     const r = await this.aplicar('voz', (doc) => {
       doc.ajustes = (doc.ajustes ?? {}) as ProyectoEntrada['ajustes'];
       const audio = ((doc.ajustes as Objeto).audio ??= {}) as Objeto;
-      audio[tipo] = { archivo: rel, inicio: op.inicio ?? 0, volumen: op.volumen ?? 1 };
-      if (op.frases) doc.frases = structuredClone(op.frases);
-      return `Cargué ${rel} como ${tipo} (${duracion.toFixed(2)} s)${op.frases ? ` con ${op.frases.length} frases` : ''}.`;
+      audio[tipo] = { archivo: rel, inicio, volumen: op.volumen ?? 1 };
+      if (frases) doc.frases = structuredClone(frases);
+      const detalle = transcripcion === 'whisper' ? `; la transcribí en ${frases!.length} frases` : frases ? ` con ${frases.length} frases` : '';
+      const total = (doc.ajustes as Objeto).duracion as number | undefined ?? Math.max(...doc.escenas.map((x) => x.fin));
+      const larga = inicio + duracion > total + 0.05 ? ` Ojo: el audio termina en ${(inicio + duracion).toFixed(2)} s y el video dura ${total} s; ajusta la duración y las escenas.` : '';
+      return `Cargué ${rel} como ${tipo} (${duracion.toFixed(2)} s)${detalle}.${larga}`;
     });
-    return { ...r, tramos, duracion };
+    return { ...r, tramos, duracion, transcripcion };
   }
 
   async verCuadro(tiempos: number[], op: OpcionesVista & { formato?: Formato } = {}): Promise<Buffer> {

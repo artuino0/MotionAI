@@ -12,7 +12,7 @@ App de escritorio para hacer motion graphics pidiéndoselos a Claude en un chat.
 - Fase 1 (motor y documento) lista: esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node y un visor en el navegador.
 - Fase 2 (herramientas MCP) lista: servidor MCP con 16 herramientas, validadores de reglas, historial de versiones en SQLite, catálogo de fuentes libres y el puente que lanza Claude Code solo con las herramientas de la app.
 - Fase 3 (app) lista: app de escritorio en Electron con monitor en vivo, línea de tiempo, chat con Claude Code, inspector, historial de versiones, ajustes de proyecto y exportación. Claude edita el mismo documento que ve el usuario a través de un socket local.
-- Siguiente: fase 4, voz con whisper.cpp, estilo de papel recortado, importadores SVG y `.pen`, y kits de marca.
+- Fase 4 en curso: voz con whisper.cpp lista (transcripción local en frases con los tiempos de las pausas). Siguen los importadores SVG y `.pen`, el estilo de papel recortado y los kits de marca.
 
 ## Paquetes
 
