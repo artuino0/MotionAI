@@ -22,7 +22,8 @@ const comun = {
   bundle: true,
   platform: 'node' as const,
   target: 'node22',
-  external: ['electron', 'skia-canvas'],
+  // Lo que no se empaqueta: módulos nativos y HyperFrames (su línea de comandos corre desde node_modules).
+  external: ['electron', 'skia-canvas', 'hyperframes', 'puppeteer-core'],
   logLevel: 'warning' as const,
   sourcemap: 'linked' as const,
 };

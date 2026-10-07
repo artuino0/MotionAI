@@ -1,0 +1,33 @@
+# Instalador de MotionAI. La app ya viene armada en una carpeta aparte (ver empaquetar.ts, que pasa directories.app).
+appId: com.motionai.app
+productName: MotionAI
+copyright: MotionAI
+directories:
+  output: instalador
+  buildResources: recursos-instalador
+# Sin asar: HyperFrames corre su línea de comandos y Chrome desde node_modules, y whisper y ffmpeg son ejecutables.
+asar: false
+electronVersion: 44.6.0
+npmRebuild: false
+files:
+  - "**/*"
+  - "!**/*.map"
+  - "!**/{README,CHANGELOG,HISTORY}.md"
+  - "!**/test/**"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: MotionAI-${version}-instalador.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: MotionAI
+linux:
+  target: [dir]
+  category: Graphics
+mac:
+  target: [dmg]
+  category: public.app-category.graphics-design

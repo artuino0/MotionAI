@@ -23,6 +23,21 @@ process.env.MOTIONAI_FUENTES ??= path.join(DIST, 'recursos/fuentes');
 process.env.MOTIONAI_GUIAS ??= path.join(DIST, 'recursos/guias');
 // whisper.cpp va en recursos/whisper (el instalador lo incluye); MOTIONAI_WHISPER lo reemplaza en desarrollo.
 process.env.MOTIONAI_RECURSOS ??= path.join(DIST, 'recursos');
+// El instalador trae ffmpeg y ffprobe en recursos/ffmpeg: van primero en el PATH (también para Claude y el servidor MCP).
+{
+  const ffmpeg = path.join(DIST, 'recursos', 'ffmpeg');
+  if (existsSync(ffmpeg)) process.env.PATH = `${ffmpeg}${path.delimiter}${process.env.PATH ?? ''}`;
+}
+/** Claude Code: MOTIONAI_CLAUDE, o en Windows donde lo deja su instalador si no está en el PATH. */
+function rutaClaude(): string | undefined {
+  if (process.env.MOTIONAI_CLAUDE) return process.env.MOTIONAI_CLAUDE;
+  if (process.platform !== 'win32') return undefined;
+  const candidatos = [
+    path.join(process.env.USERPROFILE ?? '', '.local', 'bin', 'claude.exe'),
+    path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'claude', 'claude.exe'),
+  ];
+  return candidatos.find((c) => existsSync(c));
+}
 
 // proyecto://local/<ruta> sirve archivos de la carpeta del proyecto abierto (fuentes, imágenes, audio).
 protocol.registerSchemesAsPrivileged([
@@ -66,7 +81,7 @@ async function usar(e: Estudio): Promise<ProyectoAbierto> {
     archivos: e.motor !== 'motionai',
     alTerminar: () => puerto.sincronizar(),
     socket,
-    claude: process.env.MOTIONAI_CLAUDE,
+    claude: rutaClaude(),
     modelo: process.env.MOTIONAI_MODELO,
     // Claude Code lanza el servidor MCP con el Node de Electron; el servidor le pasa todo a esta app por el socket.
     servidor: {
@@ -99,7 +114,7 @@ function carpetaLibre(nombre: string): string {
 }
 
 function registrarIpc() {
-  ipcMain.handle('claude:revisar', () => revisarClaude(process.env.MOTIONAI_CLAUDE));
+  ipcMain.handle('claude:revisar', () => revisarClaude(rutaClaude()));
   ipcMain.handle('recientes', () => recientes().listar());
   ipcMain.handle('proyecto:nuevo', async (_e, op: NuevoProyecto) =>
     usar(await Estudio.crear({

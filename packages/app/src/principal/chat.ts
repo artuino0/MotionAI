@@ -117,11 +117,20 @@ export class Chat {
       alTurno({ ...claude, herramientas: [...claude.herramientas!] });
     };
     const { alTerminar, ...lanzar } = this.lanzar;
-    try {
-      await lanzarAgente(
-        { ...lanzar, ...opciones, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA[idioma] },
+    const lanzarCon = (sesion: string | undefined) =>
+      lanzarAgente(
+        { ...lanzar, ...opciones, mensaje: texto + describirReferencias(referencias), sesion, senal: this.control!.signal, sistema: SISTEMA[idioma] },
         alEvento,
       );
+    try {
+      await lanzarCon(this.datos.sesion);
+      // Claude Code guarda la conversación según la carpeta: si el proyecto se copió o movió, ya no la encuentra.
+      // Entonces se empieza una nueva con el mismo mensaje (el proyecto conserva todo lo hecho).
+      if (this.datos.sesion && /No conversation found/i.test(claude.error ?? '') && !claude.herramientas!.length) {
+        delete claude.error;
+        this.datos.sesion = undefined;
+        await lanzarCon(undefined);
+      }
     } catch (e) {
       claude.error = (e as Error).message;
     } finally {

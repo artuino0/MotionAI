@@ -32,6 +32,20 @@ export function encontrarChrome(): string | undefined {
   return undefined;
 }
 
+/** El Chrome propio o, si no hay, el de HyperFrames (lo baja la primera vez, como al renderizar). */
+let chromeHf: Promise<string | undefined> | undefined;
+export function chromeDeHyperframes(): Promise<string | undefined> {
+  const propio = encontrarChrome();
+  if (propio) return Promise.resolve(propio);
+  chromeHf ??= (async () => {
+    await correr(['browser', 'ensure'], os.tmpdir(), 10 * 60_000);
+    const r = await correr(['browser', 'path'], os.tmpdir(), 60_000);
+    const ruta = r.stdout.trim().split('\n').pop()?.trim();
+    return ruta && existsSync(ruta) ? ruta : undefined;
+  })();
+  return chromeHf;
+}
+
 function cli(): string {
   const pkg = requerir.resolve('hyperframes/package.json');
   return path.join(path.dirname(pkg), 'bin', 'hyperframes.mjs');
@@ -248,7 +262,7 @@ export interface TextoMedido {
  * data-duration. Devuelve null si no hay Chrome con qué medir.
  */
 export async function medirTextos(dir: string, tiempos: number[], ancho: number, alto: number): Promise<TextoMedido[] | null> {
-  const chrome = encontrarChrome();
+  const chrome = await chromeDeHyperframes();
   if (!chrome) return null;
   const { default: puppeteer } = await import('puppeteer-core');
   const navegador = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--allow-file-access-from-files'] });

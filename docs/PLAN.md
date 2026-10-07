@@ -230,7 +230,7 @@ La app trae las reglas generales de redes. Cada kit de marca puede agregar las s
 | 2 · Herramientas MCP | Servidor MCP con las herramientas y los validadores; se usa desde Claude Desktop o la terminal | Claude crea desde cero un video de 15 s a partir de un brief de texto, sin ningún archivo previo | ✓ Lista |
 | 3 · App | Electron con monitor, línea de tiempo, chat, ajustes de proyecto e historial | El mismo video se hace desde el chat de la app y se exporta | ✓ Lista |
 | 4 · Voz, estilos e importadores | whisper.cpp, estilo de papel recortado, importadores SVG y `.pen` | Claude hace Flow Sites en la app solo con el brief y la voz (sin el `.pen`), y el usuario lo juzga a ojo | En curso: voz, importadores y papel listos |
-| 5 · Instalador | electron-builder y GitHub Actions para Windows | Instalador que corre en una máquina Windows limpia | Pendiente |
+| 5 · Instalador | electron-builder y GitHub Actions para Windows | Instalador que corre en una máquina Windows limpia | En curso: el instalador se arma en GitHub Actions; falta probarlo en una Windows limpia |
 
 Cambio en la fase 4: los kits de marca quedan fuera por ahora, y la prueba de cierre ya no es copiar Flow Sites cuadro por cuadro (eso medía si copiamos bien, no si Claude diseña bien) sino que Claude lo haga desde el brief y la voz.
 

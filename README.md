@@ -29,6 +29,14 @@ App de escritorio para hacer motion graphics pidiéndoselos a Claude en un chat.
 | `packages/mcp` | Servidor MCP por stdio (solo o conectado a la app por socket), guías para Claude y el lanzador de Claude Code |
 | `packages/app` | App de escritorio: Electron, Vue 3 y Pinia |
 
+## Instalador de Windows
+
+GitHub Actions lo arma en una máquina Windows en cada cambio de `packages/` (flujo «Instalador de Windows»; también se puede lanzar a mano). El `.exe` queda en la corrida, en **Artifacts → MotionAI-instalador-windows**. Trae ffmpeg y whisper.cpp con el modelo base; el Chrome que usa el motor HyperFrames se baja solo la primera vez. Para usar la app hace falta tener Claude Code instalado y con sesión (la app lo revisa en Inicio y explica cómo).
+
+El instalador no está firmado: Windows muestra «Windows protegió su PC»; se sigue con «Más información → Ejecutar de todas formas».
+
+Para armarlo a mano: `pnpm --filter @motionai/app empaquetar` (con `MOTIONAI_FFMPEG_DIR`, `MOTIONAI_WHISPER` y `MOTIONAI_WHISPER_MODELO`), y `herramientas/prueba-instalada.ts` prueba la app armada (Claude, exportar con los dos motores, ffmpeg incluido).
+
 ## Requisitos
 
 Node 22, pnpm 10 y ffmpeg con libx264 (y libx265 para H.265).
