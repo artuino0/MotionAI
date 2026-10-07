@@ -691,7 +691,7 @@ export class Estudio {
       if (op.formato && op.formato !== p.ajustes.formato) throw new ErrorEstudio('Con HyperFrames se exporta en el formato de la composición; cambia el formato en la composición.');
       const salida = op.salida ? path.resolve(this.base, op.salida) : rutaPorDefecto(p, this.base);
       const inicio = Date.now();
-      await hf.renderizar(this.composicion, salida, { fps: p.ajustes.fps, crf: p.ajustes.exportar.calidad });
+      await hf.renderizar(this.composicion, salida, { fps: p.ajustes.fps, crf: p.ajustes.exportar.calidad, codec: p.ajustes.exportar.codec });
       const segundos = (await hf.duracionComposicion(this.composicion)) ?? duracionDe(p);
       return { salida, cuadros: Math.round(segundos * p.ajustes.fps), segundos, segundosRender: (Date.now() - inicio) / 1000 };
     }

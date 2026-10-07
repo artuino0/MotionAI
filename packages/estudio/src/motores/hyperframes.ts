@@ -173,16 +173,37 @@ export async function revisar(dir: string): Promise<Revision> {
   };
 }
 
-/** Renderiza a MP4. Escribe a un archivo aparte y lo pone en su lugar solo si terminó bien. */
-export async function renderizar(dir: string, salida: string, op: { fps: number; crf: number }): Promise<void> {
+/**
+ * Renderiza a MP4. HyperFrames hace un máster de alta calidad y ffmpeg lo codifica con los ajustes del proyecto
+ * (H.264 o H.265, CRF) y un tope de bitrate para redes: el grano y los degradados disparan el peso sin él.
+ * Todo se escribe a archivos aparte y el MP4 se pone en su lugar solo si terminó bien.
+ */
+export async function renderizar(dir: string, salida: string, op: { fps: number; crf: number; codec?: 'h264' | 'h265' }): Promise<void> {
   await mkdir(path.dirname(salida), { recursive: true });
-  const parcial = path.join(path.dirname(salida), `.${path.basename(salida, '.mp4')}.${process.pid}-${Date.now().toString(36)}.parcial.mp4`);
-  const r = await correr(['render', '.', '-o', parcial, '--fps', String(op.fps), '--crf', String(op.crf), '--quiet'], dir, 60 * 60_000);
-  if (r.codigo !== 0 || !existsSync(parcial)) {
+  const base = path.join(path.dirname(salida), `.${path.basename(salida, '.mp4')}.${process.pid}-${Date.now().toString(36)}`);
+  const maestro = `${base}.maestro.mp4`, parcial = `${base}.parcial.mp4`;
+  try {
+    const r = await correr(['render', '.', '-o', maestro, '--fps', String(op.fps), '--crf', '10', '--quiet'], dir, 60 * 60_000);
+    if (r.codigo !== 0 || !existsSync(maestro)) throw new Error(`HyperFrames no pudo renderizar:\n${sinColor(r.stderr || r.stdout).trim().slice(-2000)}`);
+    await new Promise<void>((ok, mal) => {
+      execFile('ffmpeg', argumentosCodificar(maestro, parcial, op), { maxBuffer: 1 << 24 }, (e, _o, err) =>
+        e ? mal(new Error(`ffmpeg no pudo codificar el MP4: ${String(err).trim().slice(-1500)}`)) : ok());
+    });
+    await rename(parcial, salida);
+  } finally {
+    await rm(maestro, { force: true });
     await rm(parcial, { force: true });
-    throw new Error(`HyperFrames no pudo renderizar:\n${sinColor(r.stderr || r.stdout).trim().slice(-2000)}`);
   }
-  await rename(parcial, salida);
+}
+
+/** Codificación final: la misma que el motor propio, con tope de bitrate de 12 Mb/s (de sobra para redes). */
+export function argumentosCodificar(entrada: string, salida: string, op: { crf: number; codec?: 'h264' | 'h265' }): string[] {
+  return [
+    '-v', 'error', '-y', '-i', entrada,
+    ...(op.codec === 'h265' ? ['-c:v', 'libx265', '-tag:v', 'hvc1', '-x265-params', 'log-level=error'] : ['-c:v', 'libx264']),
+    '-preset', 'medium', '-crf', String(op.crf), '-maxrate', '12M', '-bufsize', '24M', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', salida,
+  ];
 }
 
 /** Archivos de texto de la composición (lo que escribe Claude), para guardarlos en el historial. */
