@@ -4,9 +4,11 @@
  *
  * Uso: pnpm tsx herramientas/prueba-motion.ts [motor] [modelo] [esfuerzo]
  *      (por defecto hyperframes, opus, high). Deja todo en salida/motion/.
+ * Con MOTION_BRIEF (archivo con el brief), MOTION_NOMBRE, MOTION_DURACION y MOTION_REFERENCIAS (archivos
+ * separados por coma que se copian a composicion/referencias/) hace otro encargo; sale en salida/motion-<nombre>/.
  */
 import { execFileSync } from 'node:child_process';
-import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Estudio } from '@motionai/estudio';
@@ -16,10 +18,13 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MOTOR = (process.argv[2] ?? 'hyperframes') as 'motionai' | 'hyperframes';
 const MODELO = process.argv[3] ?? 'opus';
 const ESFUERZO = (process.argv[4] ?? 'high') as Esfuerzo;
-const SALIDA = path.join(RAIZ, 'salida', 'motion');
-const DURACION = 20;
+const NOMBRE = process.env.MOTION_NOMBRE ?? 'PULSE';
+const slug = NOMBRE.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+const SALIDA = path.join(RAIZ, 'salida', process.env.MOTION_BRIEF ? `motion-${slug}` : 'motion');
+const DURACION = Number(process.env.MOTION_DURACION ?? 20);
+const REFERENCIAS = (process.env.MOTION_REFERENCIAS ?? '').split(',').filter(Boolean);
 
-const BRIEF = [
+const BRIEF = process.env.MOTION_BRIEF ? await readFile(process.env.MOTION_BRIEF, 'utf8') : [
   `Haz una pieza de motion graphics de ${DURACION} segundos en 9:16 con nivel de After Effects, nada caricaturesco: el lanzamiento de «PULSE», ` +
     'un reloj inteligente ficticio para corredores. Estilo editorial y tecnológico, oscuro, con un color de acento eléctrico.',
   '',
@@ -44,8 +49,12 @@ const bitacora = path.join(SALIDA, 'bitacora.md');
 await writeFile(bitacora, `# Prueba de motion complejo\n\nMotor ${MOTOR} · modelo ${MODELO} · esfuerzo ${ESFUERZO}\n\n${BRIEF}\n\n`);
 const anotar = async (s: string) => { console.log(s); await appendFile(bitacora, s + '\n'); };
 
-const e = await Estudio.crear({ carpeta: path.join(SALIDA, 'proyecto'), nombre: 'PULSE', motor: MOTOR, formato: '9:16', duracion: DURACION, fondo: '#07080B' });
+const e = await Estudio.crear({ carpeta: path.join(SALIDA, 'proyecto'), nombre: NOMBRE, motor: MOTOR, formato: '9:16', duracion: DURACION, fondo: process.env.MOTION_BRIEF ? '#FFFFFF' : '#07080B' });
 const ruta = e.ruta;
+if (REFERENCIAS.length && MOTOR === 'hyperframes') {
+  await mkdir(path.join(e.composicion, 'referencias'), { recursive: true });
+  for (const [i, f] of REFERENCIAS.entries()) await copyFile(f, path.join(e.composicion, 'referencias', `imagen-${i + 1}${path.extname(f)}`));
+}
 e.cerrar();
 
 const conteo = new Map<string, number>();
@@ -66,7 +75,7 @@ await lanzarAgente({
 await Promise.all(cola);
 
 const estudio = await Estudio.abrir(ruta);
-const tiempos = [1, 3, 5.5, 8, 10.5, 13, 15.5, 18.5];
+const tiempos = Array.from({ length: 8 }, (_, i) => Math.round(((i + 0.5) / 8) * DURACION * 10) / 10);
 await writeFile(path.join(SALIDA, 'hoja.png'), await estudio.verCuadro(tiempos.slice(0, 6), { lado: 640 }));
 await writeFile(path.join(SALIDA, 'hoja_2.png'), await estudio.verCuadro(tiempos.slice(6), { lado: 640 }));
 const revision = await estudio.revisar();
