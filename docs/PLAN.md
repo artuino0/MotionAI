@@ -208,13 +208,13 @@ La app trae las reglas generales de redes. Cada kit de marca puede agregar las s
 
 ## Fases
 
-| Fase | Qué se construye | Prueba de cierre |
-| --- | --- | --- |
-| 1 · Motor y documento | Esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node | Un proyecto escrito a mano en JSON se ve igual en el navegador y en el MP4, en 9:16 y en 16:9 |
-| 2 · Herramientas MCP | Servidor MCP con las herramientas y los validadores; se usa desde Claude Desktop o la terminal | Claude crea desde cero un video de 15 s a partir de un brief de texto, sin ningún archivo previo |
-| 3 · App | Electron con monitor, línea de tiempo, chat, ajustes de proyecto e historial | El mismo video se hace desde el chat de la app y se exporta |
-| 4 · Voz, estilos e importadores | whisper.cpp, estilo de papel recortado, importadores SVG y `.pen`, kits de marca | Flow Sites se rehace en la app y se parece al video de referencia (comparación visual por SSIM con umbral) |
-| 5 · Instalador | electron-builder y GitHub Actions para Windows | Instalador que corre en una máquina Windows limpia |
+| Fase | Qué se construye | Prueba de cierre | Estado |
+| --- | --- | --- | --- |
+| 1 · Motor y documento | Esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node | Un proyecto escrito a mano en JSON se ve igual en el navegador y en el MP4, en 9:16 y en 16:9 | ✓ Lista |
+| 2 · Herramientas MCP | Servidor MCP con las herramientas y los validadores; se usa desde Claude Desktop o la terminal | Claude crea desde cero un video de 15 s a partir de un brief de texto, sin ningún archivo previo | ✓ Lista |
+| 3 · App | Electron con monitor, línea de tiempo, chat, ajustes de proyecto e historial | El mismo video se hace desde el chat de la app y se exporta | ✓ Lista |
+| 4 · Voz, estilos e importadores | whisper.cpp, estilo de papel recortado, importadores SVG y `.pen`, kits de marca | Flow Sites se rehace en la app y se parece al video de referencia (comparación visual por SSIM con umbral) | Siguiente |
+| 5 · Instalador | electron-builder y GitHub Actions para Windows | Instalador que corre en una máquina Windows limpia | Pendiente |
 
 La fase 1 va primero porque todo depende de ella. Desde la fase 2 ya sirve en el día a día, usando Claude Desktop como chat. El caso de Flow llega en la fase 4 como prueba de que el producto aguanta un proyecto real con estilo y marca, no como punto de partida.
 

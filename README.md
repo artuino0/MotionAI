@@ -5,12 +5,14 @@ App de escritorio para hacer motion graphics pidiéndoselos a Claude en un chat.
 - [Plan del producto](docs/PLAN.md): ese plan, el esquema del documento y el contrato de las herramientas son la fuente de la verdad.
 - [El documento](docs/documento.md): formato de los proyectos.
 - [Servidor MCP](docs/mcp.md): herramientas, reglas y cómo conectarlo a Claude.
+- [La app](docs/app.md): pantallas y cómo se conecta con Claude.
 
 ## Estado
 
 - Fase 1 (motor y documento) lista: esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node y un visor en el navegador.
 - Fase 2 (herramientas MCP) lista: servidor MCP con 16 herramientas, validadores de reglas, historial de versiones en SQLite, catálogo de fuentes libres y el puente que lanza Claude Code solo con las herramientas de la app.
-- Siguiente: fase 3, la app de escritorio.
+- Fase 3 (app) lista: app de escritorio en Electron con monitor en vivo, línea de tiempo, chat con Claude Code, inspector, historial de versiones, ajustes de proyecto y exportación. Claude edita el mismo documento que ve el usuario a través de un socket local.
+- Siguiente: fase 4, voz con whisper.cpp, estilo de papel recortado, importadores SVG y `.pen`, y kits de marca.
 
 ## Paquetes
 
@@ -21,7 +23,8 @@ App de escritorio para hacer motion graphics pidiéndoselos a Claude en un chat.
 | `packages/render` | Render en Node con skia-canvas, exportación a MP4 con ffmpeg y la línea de comandos |
 | `packages/visor` | Visor web para reproducir un proyecto (Vite) |
 | `packages/estudio` | Proyecto abierto: aplica cambios validados, reglas de redes, versiones, fuentes, vistas y voz |
-| `packages/mcp` | Servidor MCP por stdio, guías para Claude y el lanzador de Claude Code |
+| `packages/mcp` | Servidor MCP por stdio (solo o conectado a la app por socket), guías para Claude y el lanzador de Claude Code |
+| `packages/app` | App de escritorio: Electron, Vue 3 y Pinia |
 
 ## Requisitos
 
@@ -44,6 +47,8 @@ pnpm typecheck
 pnpm paridad      # prueba de cierre de la fase 1: navegador vs Node vs MP4, en 9:16 y 16:9
 pnpm mcp --carpeta proyectos   # servidor MCP por stdio (ver docs/mcp.md)
 pnpm fase2 ["brief"]           # prueba de cierre de la fase 2: Claude hace un video desde un brief
+pnpm app                       # construye y abre la app de escritorio
+pnpm fase3 ["brief"]           # prueba de cierre de la fase 3: maneja la app con Playwright y Claude real
 ```
 
 `pnpm paridad` necesita Chromium: usa `/opt/pw-browsers/chromium` si existe, la variable `CHROMIUM`, o el que instala `pnpm exec playwright-core install chromium`. Deja el reporte y las imágenes de diferencias en `salida/paridad/`.

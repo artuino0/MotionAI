@@ -19,6 +19,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Construir la app
+        run: pnpm --filter @motionai/app construir
       - name: Instalar Chromium
         run: pnpm exec playwright-core install --with-deps chromium
       - name: Paridad navegador · Node · MP4

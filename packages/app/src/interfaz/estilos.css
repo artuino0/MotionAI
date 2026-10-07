@@ -1,0 +1,41 @@
+:root {
+  --fondo: #14161a;
+  --panel: #1b1e23;
+  --panel-2: #22262d;
+  --borde: #2c3038;
+  --texto: #e9eaec;
+  --tenue: #9aa0aa;
+  --muy-tenue: #6b717c;
+  --acento: #2ec4d6;
+  --acento-osc: #1d9aab;
+  --coral: #ff7a66;
+  --mostaza: #c9952e;
+  --amarillo: #edb43e;
+  --verde: #3fbf7f;
+  --rojo: #ff6b6b;
+  --radio: 8px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; height: 100%; }
+body { background: var(--fondo); color: var(--texto); font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; user-select: none; }
+button { font: inherit; color: var(--texto); background: var(--panel-2); border: 1px solid var(--borde); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: #3d424c; background: #282c34; }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primario { background: var(--acento); border-color: var(--acento); color: #06272c; font-weight: 600; }
+button.primario:hover:not(:disabled) { background: #45d1e1; }
+button.icono { padding: 4px 8px; min-width: 32px; }
+button.peligro { color: var(--rojo); }
+input, select, textarea { font: inherit; color: var(--texto); background: var(--fondo); border: 1px solid var(--borde); border-radius: 6px; padding: 6px 8px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--acento); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border: 1px solid var(--borde); border-radius: 999px; color: var(--tenue); font: 12px ui-monospace, 'SF Mono', Menlo, monospace; white-space: nowrap; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--borde); padding: 0 8px; flex: none; }
+.tabs button { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 12px 8px 10px; color: var(--tenue); font-size: 13.5px; }
+.tabs button.activo { color: var(--texto); border-bottom-color: var(--acento); }
+.tabs button:hover { background: none; color: var(--texto); }
+.desplazable { overflow: auto; min-height: 0; }
+.desplazable::-webkit-scrollbar { width: 10px; height: 10px; }
+.desplazable::-webkit-scrollbar-thumb { background: #30343c; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+.etiqueta { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--acento); font-weight: 600; }
+.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+.tenue { color: var(--tenue); }

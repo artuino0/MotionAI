@@ -8,22 +8,20 @@ import {
   CICLOS, CURVAS, ENTRADAS, FORMATO_IDS, NodoEsquema, PLATAFORMAS, SALIDAS,
   type Componente, type Formato, type Frase, type Nodo,
 } from '@motionai/documento';
-import { Estudio, catalogoFuentes, type Resultado } from '@motionai/estudio';
+import { catalogoFuentes, type Resultado } from '@motionai/estudio';
+import type { PuertoEstudio } from './puerto.js';
 
-const AQUI = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = path.resolve(AQUI, '../skill');
-const DOCS = path.resolve(AQUI, '../../../docs');
+/** Carpeta con las guías (inicio.md, diseno.md, documento.md). La app empaquetada la indica con MOTIONAI_GUIAS. */
+function guia(tema: 'inicio' | 'diseno' | 'documento'): string {
+  const dir = process.env.MOTIONAI_GUIAS;
+  if (dir) return path.join(dir, `${tema}.md`);
+  const aqui = path.dirname(fileURLToPath(import.meta.url));
+  return tema === 'documento' ? path.resolve(aqui, '../../../docs/documento.md') : path.resolve(aqui, `../skill/${tema}.md`);
+}
 
 export const INSTRUCCIONES =
   'Herramientas de MotionAI para hacer motion graphics. Antes de empezar llama leer_skill con tema "inicio": ' +
   'explica cómo trabajar, el formato del documento y cómo revisar tu trabajo.';
-
-/** Estado del servidor: el proyecto abierto y dónde se crean los nuevos. */
-export interface Sesion {
-  estudio?: Estudio;
-  /** Carpeta donde `nuevo_proyecto` crea proyectos. */
-  carpetaProyectos: string;
-}
 
 const texto = (t: string, error = false): CallToolResult => ({ content: [{ type: 'text', text: t }], ...(error ? { isError: true } : {}) });
 
@@ -32,11 +30,6 @@ function respuesta(r: Resultado): CallToolResult {
   if (r.errores?.length) partes.push(`Motivos:\n- ${r.errores.join('\n- ')}`);
   if (r.avisos?.length) partes.push(`Avisos:\n- ${r.avisos.join('\n- ')}`);
   return texto(partes.join('\n'), !r.ok);
-}
-
-function abierto(s: Sesion): Estudio {
-  if (!s.estudio) throw new Error('No hay un proyecto abierto. Usa nuevo_proyecto o abrir_proyecto.');
-  return s.estudio;
 }
 
 /** Valida una pieza antes de mandarla al documento, para dar errores con la ruta dentro de la pieza. */
@@ -65,7 +58,7 @@ const PIEZA = z
     '"peso":900,"tamano":110,"relleno":"#1E1E1E","x":"50%","y":"40%","ancla":"centro","animacion":{"entra":{"tipo":"sube","en":"escena+0.2"}}}',
   );
 
-export function registrarHerramientas(server: McpServer, s: Sesion): void {
+export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void {
   server.registerTool(
     'leer_skill',
     {
@@ -77,7 +70,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       annotations: { readOnlyHint: true },
     },
     seguro(({ tema }) => {
-      if (tema === 'documento') return texto(readFileSync(path.join(DOCS, 'documento.md'), 'utf8'));
+
       if (tema === 'fuentes') {
         const filas = catalogoFuentes().map((f) => `- **${f.familia}** (pesos ${Object.keys(f.pesos).join(', ')}): ${f.estilo}`);
         return texto(
@@ -85,7 +78,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
           'Si pides un peso que no está, se usa el más cercano. Combina como mucho dos familias por video.',
         );
       }
-      return texto(readFileSync(path.join(SKILL, `${tema}.md`), 'utf8'));
+      return texto(readFileSync(guia(tema), 'utf8'));
     }),
   );
 
@@ -97,9 +90,10 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
-    seguro(() => {
-      if (!s.estudio) return texto(JSON.stringify({ proyecto: null, nota: 'No hay proyecto abierto. Usa nuevo_proyecto o abrir_proyecto.', carpetaProyectos: s.carpetaProyectos }, null, 2));
-      return texto(JSON.stringify(s.estudio.estado(), null, 2));
+    seguro(async () => {
+      const e = await p.estado();
+      if (!e) return texto(JSON.stringify({ proyecto: null, nota: 'No hay proyecto abierto. Usa nuevo_proyecto o abrir_proyecto.' }, null, 2));
+      return texto(JSON.stringify(e, null, 2));
     }),
   );
 
@@ -113,9 +107,8 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       inputSchema: { detalle: z.enum(['resumen', 'json']).default('resumen'), id: z.string().optional() },
       annotations: { readOnlyHint: true },
     },
-    seguro(({ detalle, id }) => {
-      const e = abierto(s);
-      const doc = e.documento;
+    seguro(async ({ detalle, id }) => {
+      const doc = await p.documento();
       if (id) {
         const buscar = (n: Nodo): Nodo | undefined => n.id === id ? n : n.tipo === 'grupo' ? n.hijos.map(buscar).find(Boolean) : undefined;
         const encontrado =
@@ -125,7 +118,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
         if (!encontrado) throw new Error(`No hay nada con id "${id}".`);
         return texto(JSON.stringify(encontrado, null, 2));
       }
-      return texto(detalle === 'json' ? JSON.stringify(doc, null, 2) : e.resumen());
+      return texto(detalle === 'json' ? JSON.stringify(doc, null, 2) : await p.resumen());
     }),
   );
 
@@ -146,11 +139,8 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       },
     },
     seguro(async (a) => {
-      const slug = a.nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'proyecto';
-      const carpeta = a.carpeta ? path.resolve(s.carpetaProyectos, a.carpeta) : path.join(s.carpetaProyectos, slug);
-      s.estudio?.cerrar();
-      s.estudio = await Estudio.crear({ ...a, carpeta, formato: a.formato as Formato });
-      return texto(`✓ Proyecto "${a.nombre}" creado en ${s.estudio.ruta}.\n${s.estudio.resumen()}`);
+      const r = await p.nuevo({ ...a, formato: a.formato as Formato });
+      return texto(`✓ Proyecto "${a.nombre}" creado en ${r.ruta}.\n${r.resumen}`);
     }),
   );
 
@@ -162,11 +152,8 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       inputSchema: { ruta: z.string() },
     },
     seguro(async ({ ruta }) => {
-      let r = path.resolve(s.carpetaProyectos, ruta);
-      if (!r.endsWith('.json')) r = path.join(r, 'proyecto.json');
-      s.estudio?.cerrar();
-      s.estudio = await Estudio.abrir(r);
-      return texto(`✓ Abrí ${s.estudio.ruta}.\n${s.estudio.resumen()}`);
+      const r = await p.abrir(ruta);
+      return texto(`✓ Abrí ${r.ruta}.\n${r.resumen}`);
     }),
   );
 
@@ -185,7 +172,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
         }),
       },
     },
-    seguro(async ({ cambios }) => respuesta(await abierto(s).ajustes(cambios))),
+    seguro(async ({ cambios }) => respuesta(await p.ajustes(cambios))),
   );
 
   server.registerTool(
@@ -207,7 +194,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
     },
     seguro(async ({ id, nombre, tipo, nota, raiz, reemplazar }) => {
       const comp: Componente = { id, nombre, ...(tipo ? { tipo } : {}), ...(nota ? { nota } : {}), raiz: validarPieza(raiz, 'raiz') };
-      return respuesta(await abierto(s).crearPieza(comp, reemplazar));
+      return respuesta(await p.crearPieza(comp, reemplazar));
     }),
   );
 
@@ -226,7 +213,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       },
     },
     seguro(async ({ escena, dentro_de, pieza, posicion }) =>
-      respuesta(await abierto(s).agregarPieza({ pieza: validarPieza(pieza), escena, dentro_de, posicion })),
+      respuesta(await p.agregarPieza({ pieza: validarPieza(pieza), escena, dentro_de, posicion })),
     ),
   );
 
@@ -241,7 +228,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
         `Entradas: ${ENTRADAS.join(', ')}. Salidas: ${SALIDAS.join(', ')}. Ciclos: ${CICLOS.join(', ')}. Curvas: ${CURVAS.join(', ')}.`,
       inputSchema: { cambios: z.array(z.looseObject({ id: z.string() })).min(1) },
     },
-    seguro(async ({ cambios }) => respuesta(await abierto(s).cambiar(cambios))),
+    seguro(async ({ cambios }) => respuesta(await p.cambiar(cambios))),
   );
 
   server.registerTool(
@@ -251,7 +238,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       description: 'Saca piezas de su escena o grupo, o componentes que nadie usa, por id.',
       inputSchema: { ids: z.array(z.string()).min(1) },
     },
-    seguro(async ({ ids }) => respuesta(await abierto(s).quitarPieza(ids))),
+    seguro(async ({ ids }) => respuesta(await p.quitarPieza(ids))),
   );
 
   server.registerTool(
@@ -262,8 +249,8 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       inputSchema: { texto: z.string().optional(), tipo: z.string().optional(), con_piezas: z.boolean().default(false).describe('Incluir el árbol de piezas de cada componente') },
       annotations: { readOnlyHint: true },
     },
-    seguro(({ texto: q, tipo, con_piezas }) => {
-      const r = abierto(s).buscarBiblioteca(q, tipo);
+    seguro(async ({ texto: q, tipo, con_piezas }) => {
+      const r = await p.buscarBiblioteca(q, tipo);
       if (!r.length) return texto('No hay componentes que coincidan. Crea uno con crear_pieza.');
       return texto(JSON.stringify(con_piezas ? r : r.map(({ raiz, ...c }) => ({ ...c, raiz: { id: raiz.id, tipo: raiz.tipo } })), null, 2));
     }),
@@ -288,7 +275,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       },
     },
     seguro(async (a) => {
-      const e = abierto(s);
+      const e = p;
       const falta = (k: string) => { throw new Error(`Para ${a.operacion} falta ${k}.`); };
       switch (a.operacion) {
         case 'crear':
@@ -320,7 +307,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       },
     },
     seguro(async (a) => {
-      const r = await abierto(s).audio({ ...a, frases: a.frases as Frase[] | undefined });
+      const r = await p.audio({ ...a, frases: a.frases as Frase[] | undefined });
       const base = respuesta(r);
       if (r.ok && r.tramos) {
         const lista = r.tramos.map((t, i) => `  ${i + 1}. ${t.inicio}–${t.fin} s`).join('\n');
@@ -346,7 +333,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       annotations: { readOnlyHint: true },
     },
     seguro(async ({ tiempos, zonas, resaltar, formato }) => {
-      const png = await abierto(s).verCuadro(tiempos, { zonas, resaltar, formato: formato as Formato | undefined });
+      const png = await p.verCuadro(tiempos, { zonas, resaltar, formato: formato as Formato | undefined });
       return {
         content: [
           { type: 'image', data: png.toString('base64'), mimeType: 'image/png' },
@@ -369,7 +356,7 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       },
     },
     seguro(async (a) => {
-      const r = await abierto(s).exportar({ ...a, formato: a.formato as Formato | undefined });
+      const r = await p.exportar({ ...a, formato: a.formato as Formato | undefined });
       return texto(`✓ Exporté ${r.salida} · ${r.cuadros} cuadros · ${r.segundos.toFixed(2)} s de video · ${r.segundosRender.toFixed(1)} s de render.`);
     }),
   );
@@ -382,12 +369,11 @@ export function registrarHerramientas(server: McpServer, s: Sesion): void {
       inputSchema: { operacion: z.enum(['listar', 'volver']).default('listar'), version: z.number().int().positive().optional(), limite: z.number().int().positive().max(100).default(20) },
     },
     seguro(async ({ operacion, version, limite }) => {
-      const e = abierto(s);
       if (operacion === 'volver') {
         if (!version) throw new Error('Di a qué versión volver.');
-        return respuesta(await e.volverA(version));
+        return respuesta(await p.volverA(version));
       }
-      return texto(e.versiones(limite).map((v) => `${v.numero} · ${v.fecha.slice(0, 19).replace('T', ' ')} · ${v.herramienta}: ${v.resumen}`).join('\n'));
+      return texto((await p.versiones(limite)).map((v) => `${v.numero} · ${v.fecha.slice(0, 19).replace('T', ' ')} · ${v.herramienta}: ${v.resumen}`).join('\n'));
     }),
   );
 }

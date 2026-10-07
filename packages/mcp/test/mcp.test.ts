@@ -4,11 +4,22 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
-import { crearServidor } from '../src/index.js';
+import { PuertoLocal, crearServidor, puertoRemoto, servirPuerto } from '../src/index.js';
+import { registrarHerramientas, INSTRUCCIONES } from '../src/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-async function conectar() {
+async function conectar(remoto = false) {
   const carpeta = await mkdtemp(path.join(os.tmpdir(), 'mcp-'));
-  const { server } = await crearServidor({ carpetaProyectos: carpeta });
+  let server: McpServer;
+  if (remoto) {
+    // Como en la app: el proyecto vive en otro proceso y el servidor MCP le habla por un socket.
+    const local = new PuertoLocal(carpeta);
+    const { ruta } = await servirPuerto(local, path.join(carpeta, 'app.sock'));
+    server = new McpServer({ name: 'motionai', version: '0' }, { instructions: INSTRUCCIONES });
+    registrarHerramientas(server, puertoRemoto(ruta));
+  } else {
+    server = (await crearServidor({ carpetaProyectos: carpeta })).server;
+  }
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'prueba', version: '0' });
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -31,8 +42,8 @@ describe('servidor MCP', () => {
     expect(client.getInstructions()).toMatch(/leer_skill/);
   });
 
-  it('flujo completo: crear, agregar, rechazar, cambiar, ver y exportar', async () => {
-    const { llamar, carpeta } = await conectar();
+  it.each([false, true])('flujo completo (por socket: %s): crear, agregar, rechazar, cambiar, ver y exportar', async (remoto) => {
+    const { llamar, carpeta } = await conectar(remoto);
     expect((await llamar('leer_estado')).texto).toMatch(/No hay proyecto/);
     expect((await llamar('agregar_pieza', { pieza: { id: 'a', tipo: 'rect' } })).error).toBe(true);
     expect((await llamar('leer_skill', { tema: 'inicio' })).texto).toMatch(/Cómo trabajar/);

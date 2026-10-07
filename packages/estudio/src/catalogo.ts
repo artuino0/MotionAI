@@ -4,8 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { recorrer, type Fuente, type Nodo, type ProyectoEntrada } from '@motionai/documento';
 
-/** Carpeta con las fuentes libres que trae la app. */
-export const CARPETA_FUENTES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fuentes');
+/** Carpeta con las fuentes libres que trae la app. La app empaquetada la indica con MOTIONAI_FUENTES. */
+export function carpetaFuentes(): string {
+  return process.env.MOTIONAI_FUENTES ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fuentes');
+}
 
 export interface FamiliaCatalogo {
   familia: string;
@@ -15,7 +17,7 @@ export interface FamiliaCatalogo {
 
 let catalogo: FamiliaCatalogo[] | undefined;
 export function catalogoFuentes(): FamiliaCatalogo[] {
-  catalogo ??= JSON.parse(readFileSync(path.join(CARPETA_FUENTES, 'catalogo.json'), 'utf8')) as FamiliaCatalogo[];
+  catalogo ??= JSON.parse(readFileSync(path.join(carpetaFuentes(), 'catalogo.json'), 'utf8')) as FamiliaCatalogo[];
   return catalogo;
 }
 
@@ -46,7 +48,7 @@ export async function asegurarFuentes(doc: ProyectoEntrada, base: string): Promi
     const nuevas: Fuente[] = [];
     for (const [peso, archivo] of Object.entries(fam.pesos)) {
       const abs = path.join(destino, archivo);
-      if (!existsSync(abs)) await copyFile(path.join(CARPETA_FUENTES, archivo), abs);
+      if (!existsSync(abs)) await copyFile(path.join(carpetaFuentes(), archivo), abs);
       nuevas.push({ familia, archivo: `recursos/fuentes/${archivo}`, peso: Number(peso) });
     }
     doc.fuentes = [...(doc.fuentes ?? []), ...nuevas];

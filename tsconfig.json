@@ -14,5 +14,6 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
-  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "herramientas/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "herramientas/**/*.ts"],
+  "exclude": ["packages/app/**"]
 }

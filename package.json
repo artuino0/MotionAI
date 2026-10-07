@@ -5,12 +5,14 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --filter @motionai/app exec vue-tsc --noEmit -p tsconfig.json",
     "visor": "pnpm --filter @motionai/visor dev",
     "motionai": "tsx packages/render/src/cli.ts",
     "paridad": "tsx herramientas/paridad.ts",
     "fase2": "tsx herramientas/prueba-fase2.ts",
-    "mcp": "node --disable-warning=ExperimentalWarning --import tsx packages/mcp/src/servidor.ts"
+    "mcp": "node --disable-warning=ExperimentalWarning --import tsx packages/mcp/src/servidor.ts",
+    "app": "pnpm --filter @motionai/app dev",
+    "fase3": "tsx herramientas/prueba-fase3.ts"
   },
   "devDependencies": {
     "@motionai/documento": "workspace:*",

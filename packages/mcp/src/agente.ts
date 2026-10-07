@@ -11,7 +11,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-const SERVIDOR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'servidor.ts');
+const servidorTs = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'servidor.ts');
 const NOMBRE_MCP = 'motionai';
 
 export interface OpcionesAgente {
@@ -28,6 +28,12 @@ export interface OpcionesAgente {
   cwd?: string;
   /** Texto extra para el system prompt. */
   sistema?: string;
+  /** Socket de la app abierta: el servidor MCP le pasa cada herramienta. */
+  socket?: string;
+  /** Cómo lanzar el servidor MCP (la app empaquetada usa su propio ejecutable). Por defecto, tsx sobre el código. */
+  servidor?: { command: string; args: string[]; env?: Record<string, string> };
+  /** Para cancelar la respuesta en curso. */
+  senal?: AbortSignal;
 }
 
 export type EventoAgente =
@@ -38,11 +44,16 @@ export type EventoAgente =
   | { tipo: 'fin'; sesion?: string; error: boolean; texto?: string; costoUsd?: number; duracionMs?: number; turnos?: number };
 
 /** Configuración MCP que apunta al servidor de la app. */
-export function configuracionMcp(op: Pick<OpcionesAgente, 'carpetaProyectos' | 'proyecto'>) {
+export function configuracionMcp(op: Pick<OpcionesAgente, 'carpetaProyectos' | 'proyecto' | 'socket' | 'servidor'>) {
+  const extra = ['--carpeta', op.carpetaProyectos];
+  if (op.proyecto) extra.push('--proyecto', op.proyecto);
+  if (op.socket) extra.push('--socket', op.socket);
+  if (op.servidor) {
+    const { command, args, env } = op.servidor;
+    return { mcpServers: { [NOMBRE_MCP]: { command, args: [...args, ...extra], ...(env ? { env } : {}) } } };
+  }
   const tsx = createRequire(import.meta.url).resolve('tsx/cli');
-  const args = ['--disable-warning=ExperimentalWarning', tsx, SERVIDOR, '--carpeta', op.carpetaProyectos];
-  if (op.proyecto) args.push('--proyecto', op.proyecto);
-  return { mcpServers: { [NOMBRE_MCP]: { command: process.execPath, args } } };
+  return { mcpServers: { [NOMBRE_MCP]: { command: process.execPath, args: ['--disable-warning=ExperimentalWarning', tsx, servidorTs(), ...extra] } } };
 }
 
 /**
@@ -110,6 +121,7 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
     cwd: op.cwd ?? op.carpetaProyectos,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
+    ...(op.senal ? { signal: op.senal } : {}),
   });
   let sesion: string | undefined;
   let errores = '';
@@ -126,9 +138,53 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
     }
   });
   const codigo = await new Promise<number>((ok, mal) => {
-    hijo.on('error', (e) => mal(new Error(`No se pudo lanzar Claude Code (${op.claude ?? 'claude'}): ${e.message}`)));
-    hijo.on('close', (c) => ok(c ?? 1));
+    hijo.on('error', (e) => {
+      if (op.senal?.aborted) ok(130);
+      else mal(new Error(`No se pudo lanzar Claude Code (${op.claude ?? 'claude'}): ${e.message}`));
+    });
+    hijo.on('close', (c) => ok(c ?? 130));
   });
-  if (codigo !== 0 && errores.trim()) alEvento({ tipo: 'fin', sesion, error: true, texto: errores.trim().slice(-2000) });
+  if (op.senal?.aborted) alEvento({ tipo: 'fin', sesion, error: true, texto: 'Cancelado.' });
+  else if (codigo !== 0 && errores.trim()) alEvento({ tipo: 'fin', sesion, error: true, texto: errores.trim().slice(-2000) });
   return { codigo, sesion };
+}
+
+export interface EstadoClaude {
+  instalado: boolean;
+  version?: string;
+  sesionIniciada: boolean;
+  /** Qué hacer si falta algo. */
+  pasos?: string[];
+}
+
+/** Revisa que Claude Code esté instalado, en una versión soportada y con sesión iniciada. */
+export async function revisarClaude(claude = 'claude'): Promise<EstadoClaude> {
+  const correr = (args: string[]) =>
+    new Promise<{ codigo: number; salida: string }>((ok) => {
+      const h = spawn(claude, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let salida = '';
+      h.stdout.on('data', (d) => (salida += d));
+      h.on('error', () => ok({ codigo: -1, salida: '' }));
+      h.on('close', (c) => ok({ codigo: c ?? 1, salida }));
+    });
+  const v = await correr(['--version']);
+  if (v.codigo !== 0) {
+    return {
+      instalado: false,
+      sesionIniciada: false,
+      pasos: ['Instala Claude Code: https://code.claude.com', 'Abre una terminal y corre `claude` una vez para iniciar sesión.', 'Vuelve a la app.'],
+    };
+  }
+  const version = /\d+\.\d+\.\d+/.exec(v.salida)?.[0];
+  const minima = [2, 0, 0];
+  const actual = (version ?? '0.0.0').split('.').map(Number);
+  const i = actual.findIndex((n, k) => n !== minima[k]);
+  const vieja = i >= 0 && actual[i]! < minima[i]!;
+  const a = await correr(['auth', 'status', '--json']);
+  let sesionIniciada = false;
+  try { sesionIniciada = !!JSON.parse(a.salida).loggedIn; } catch { /* versión sin auth status */ }
+  const pasos: string[] = [];
+  if (vieja) pasos.push(`Actualiza Claude Code (tienes ${version}; la app necesita ${minima.join('.')} o más nueva).`);
+  if (!sesionIniciada) pasos.push('Abre una terminal y corre `claude` una vez para iniciar sesión con tu cuenta (Pro o Max).');
+  return { instalado: true, version, sesionIniciada, ...(pasos.length ? { pasos } : {}) };
 }
