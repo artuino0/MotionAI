@@ -50,6 +50,7 @@ export class Estudio {
   private hallazgos: Set<string>;
   private cola: Promise<unknown> = Promise.resolve();
   private mtime = 0;
+  private exportando = false;
 
   private constructor(
     readonly ruta: string,
@@ -581,6 +582,16 @@ export class Estudio {
   }
 
   async exportar(op: { salida?: string; formato?: Formato; desde?: number; hasta?: number; progreso?: (h: number, t: number) => void } = {}) {
+    if (this.exportando) throw new ErrorEstudio('Ya se está exportando este proyecto. Espera a que termine; el MP4 queda en la carpeta de exportados.');
+    this.exportando = true;
+    try {
+      return await this.exportarAhora(op);
+    } finally {
+      this.exportando = false;
+    }
+  }
+
+  private async exportarAhora(op: Parameters<Estudio['exportar']>[0] & object) {
     let p = this.proyecto();
     if (op.formato) p = conFormato(p, op.formato);
     const { entorno, faltantes } = await cargarRecursos({ proyecto: p, base: this.base });

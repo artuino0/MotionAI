@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Proyecto } from '@motionai/documento';
 import { escenaEn, fraseEn, tiempoEstilo, totalCuadros, type Entorno, type Escenario } from '@motionai/motor';
@@ -78,7 +78,10 @@ export async function exportarMP4(
   const ultimo = Math.min(totalCuadros(esc), Math.round(hasta * esc.fps));
   const total = ultimo - primero;
 
-  const ff = spawn(op.ffmpeg ?? 'ffmpeg', argumentosFfmpeg(esc, base, salida, desde, hasta), {
+  // Se escribe a un archivo aparte y solo al terminar bien se pone en su lugar: un MP4 a medias o dos
+  // exportaciones a la vez nunca dejan un archivo roto con el nombre final.
+  const parcial = path.join(path.dirname(salida), `.${path.basename(salida, '.mp4')}.${process.pid}-${Date.now().toString(36)}.parcial.mp4`);
+  const ff = spawn(op.ffmpeg ?? 'ffmpeg', argumentosFfmpeg(esc, base, parcial, desde, hasta), {
     stdio: ['pipe', 'ignore', 'pipe'],
   });
   let errores = '';
@@ -103,9 +106,19 @@ export async function exportarMP4(
       if (!ff.stdin.write(px)) await new Promise<void>((r) => ff.stdin.once('drain', () => r()));
       op.progreso?.(i + 1, total);
     }
-  } finally {
+  } catch (e) {
     ff.stdin.end();
+    await termino.catch(() => undefined);
+    await rm(parcial, { force: true });
+    throw e;
   }
-  await termino;
+  ff.stdin.end();
+  try {
+    await termino;
+  } catch (e) {
+    await rm(parcial, { force: true });
+    throw e;
+  }
+  await rename(parcial, salida);
   return { salida, cuadros: total, segundos: hasta - desde };
 }

@@ -195,4 +195,18 @@ describe('Estudio', () => {
     // Los errores de reglas que trae el diseño original quedan como avisos.
     expect(c.avisos?.some((a) => a.includes('viene del archivo importado'))).toBe(true);
   });
+
+  it('no deja dos exportaciones a la vez ni un MP4 a medias', async () => {
+    const e = await nuevo({ duracion: 1 });
+    await e.agregarPieza({ pieza: titulo() });
+    const [a, b] = await Promise.allSettled([e.exportar(), e.exportar()]);
+    expect(a.status).toBe('fulfilled');
+    expect(b.status === 'rejected' && String(b.reason)).toMatch(/Ya se está exportando/);
+    const salida = (a as PromiseFulfilledResult<{ salida: string }>).value.salida;
+    expect(() => execFileSync('ffmpeg', ['-v', 'error', '-xerror', '-i', salida, '-f', 'null', '-'])).not.toThrow();
+    const { readdirSync } = await import('node:fs');
+    expect(readdirSync(path.dirname(salida)).filter((f) => f.includes('parcial'))).toEqual([]);
+    expect((await e.exportar()).salida).toBe(salida); // terminada la primera, se puede volver a exportar
+  });
 });
+
