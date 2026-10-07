@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 const servidorTs = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'servidor.ts');
 const NOMBRE_MCP = 'motionai';
 
+/** Cuánto espera Claude Code a una herramienta (exportar un video largo puede tardar minutos). */
+export const TIEMPO_HERRAMIENTA_MS = 15 * 60 * 1000;
+
 export const ESFUERZOS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Esfuerzo = (typeof ESFUERZOS)[number];
 
@@ -126,7 +129,9 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
   const cwd = op.cwd ?? op.carpetaProyectos;
   await mkdir(cwd, { recursive: true });
   // Si la app corre dentro de otra sesión de Claude Code, el hijo no debe heredar su id de sesión.
-  const { CLAUDE_CODE_SESSION_ID: _, ...env } = process.env;
+  const { CLAUDE_CODE_SESSION_ID: _, ...resto } = process.env;
+  // Exportar un video tarda más que el minuto que Claude Code espera por defecto a una herramienta MCP.
+  const env = { ...resto, MCP_TOOL_TIMEOUT: resto.MCP_TOOL_TIMEOUT ?? String(TIEMPO_HERRAMIENTA_MS) };
   const hijo = spawn(op.claude ?? 'claude', argumentosClaude(op, rutaConfig), {
     cwd,
     env,
