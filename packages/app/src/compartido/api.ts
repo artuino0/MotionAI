@@ -69,6 +69,8 @@ export interface ApiMotionAI {
   mostrarArchivo(ruta: string): Promise<void>;
   /** Elige un audio y lo carga como voz (se transcribe) o como música. Null si el usuario cancela. */
   cargarAudio(tipo: 'voz' | 'musica'): Promise<{ ok: boolean; mensaje: string; errores?: string[]; frases?: number; transcripcion?: string } | null>;
+  /** Elige un SVG o .pen y lo importa a la biblioteca (o la campaña completa de un .pen). Null si el usuario cancela. */
+  importar(): Promise<{ ok: boolean; mensaje: string; errores?: string[]; componentes: number; campana: boolean } | null>;
   /** Abre un archivo con la app predeterminada (para reproducir el MP4). */
   abrirArchivo(ruta: string): Promise<void>;
   /** Idioma de la interfaz: el principal lo usa en sus diálogos y para pedirle a Claude que responda igual. */

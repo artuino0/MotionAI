@@ -37,7 +37,7 @@ describe('servidor MCP', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'abrir_proyecto', 'agregar_pieza', 'ajustes_proyecto', 'buscar_biblioteca', 'cambiar', 'crear_pieza', 'escenas',
-      'exportar', 'leer_estado', 'leer_proyecto', 'leer_skill', 'nuevo_proyecto', 'quitar_pieza', 'ver_cuadro', 'versiones', 'voz',
+      'exportar', 'importar', 'leer_estado', 'leer_proyecto', 'leer_skill', 'nuevo_proyecto', 'quitar_pieza', 'ver_cuadro', 'versiones', 'voz',
     ]);
     expect(client.getInstructions()).toMatch(/leer_skill/);
   });

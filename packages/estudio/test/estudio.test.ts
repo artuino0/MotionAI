@@ -165,4 +165,34 @@ describe('Estudio', () => {
     expect(existsSync(path.join(e.base, 'recursos/voz.wav'))).toBe(true);
     expect(e.proyecto().ajustes.audio.voz!.archivo).toBe('recursos/voz.wav');
   });
+
+  it('importa un SVG y las piezas o la campaña de un .pen', async () => {
+    const dir = await temp();
+    const svg = path.join(dir, 'Estrella Roja.svg');
+    await writeFile(svg, '<svg viewBox="0 0 10 10"><path d="M5 0L10 10H0Z" fill="red"/></svg>');
+    const e = await nuevo();
+    const r = await e.importar({ archivo: svg, tipo: 'icono' });
+    expect(r.ok).toBe(true);
+    expect(r.componentes).toEqual(['estrella-roja']);
+    expect(e.proyecto().biblioteca[0]).toMatchObject({ id: 'estrella-roja', nombre: 'Estrella Roja', tipo: 'icono' });
+    expect((await e.importar({ archivo: svg })).mensaje).toMatch(/No había/);
+    expect((await e.importar({ archivo: e.ruta })).ok).toBe(false);
+
+    const pen = path.resolve(import.meta.dirname, '../../../referencia/flow-sites/FlowSites.pen');
+    const piezas = await e.importar({ archivo: pen, piezas: ['2xapvZ'] });
+    expect(piezas.ok).toBe(true);
+    expect(piezas.campanas).toEqual(['Flow Sites']);
+    expect(existsSync(path.join(e.base, 'recursos/fondo_rosa_vertical.png'))).toBe(true);
+
+    const c = await e.importar({ archivo: pen, modo: 'campana' });
+    expect(c.ok).toBe(true);
+    const p = e.proyecto();
+    expect(p.escenas).toHaveLength(6);
+    expect(p.frases).toHaveLength(9);
+    expect(p.ajustes.duracion).toBe(29.6);
+    expect(p.ajustes.audio.voz).toMatchObject({ archivo: 'recursos/voz_sites.mp3', inicio: 0.25 });
+    expect(existsSync(path.join(e.base, 'recursos/voz_sites.mp3'))).toBe(true);
+    // Los errores de reglas que trae el diseño original quedan como avisos.
+    expect(c.avisos?.some((a) => a.includes('viene del archivo importado'))).toBe(true);
+  });
 });

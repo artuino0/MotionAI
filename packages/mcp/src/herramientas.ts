@@ -330,6 +330,42 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
   );
 
   server.registerTool(
+    'importar',
+    {
+      title: 'Importar SVG o .pen',
+      description:
+        'Trae dibujos hechos en otro lado. Un SVG se vuelve un componente de la biblioteca (un trazo por figura; ' +
+        'degradados, transformaciones y textos incluidos). De un archivo .pen (Pencil) se traen sus piezas reusables a la biblioteca, ' +
+        'o con modo "campana" una campaña completa: escenas con su animación, frases, voz y formato, que REEMPLAZAN a las del proyecto ' +
+        '(úsalo solo si el usuario lo pide). Lo que no se puede traer vuelve como aviso. Después usa las piezas con instancias.',
+      inputSchema: {
+        archivo: z.string().describe('Ruta al .svg o .pen (relativa al proyecto o absoluta)'),
+        modo: z.enum(['biblioteca', 'campana']).default('biblioteca').describe('Solo para .pen'),
+        campana: z.string().optional().describe('Nombre de la campaña del .pen (por defecto la primera)'),
+        piezas: z.array(z.string()).optional().describe('Ids de las piezas del .pen a traer (y las que usan); por defecto todas'),
+        id: z.string().optional().describe('Id del componente para un SVG (por defecto, el nombre del archivo)'),
+        nombre: z.string().optional(),
+        tipo: z.string().optional().describe('Tipo del componente para un SVG: icono, ilustracion, logo…'),
+        reemplazar: z.boolean().default(false).describe('Reemplazar componentes que ya estén en la biblioteca'),
+      },
+    },
+    seguro(async (a) => {
+      const r = await p.importar(a);
+      const base = respuesta(r);
+      if (r.ok && r.componentes?.length) {
+        const doc = await p.documento();
+        const lineas = (doc.biblioteca ?? []).filter((c) => r.componentes!.includes(c.id)).map((c) => {
+          const raiz = c.raiz as { ancho?: unknown; alto?: unknown };
+          return `  ${c.id} · ${c.nombre ?? ''}${c.tipo ? ` (${c.tipo})` : ''}${typeof raiz.ancho === 'number' ? ` ${raiz.ancho}×${raiz.alto}` : ''}`;
+        });
+        (base.content[0] as { text: string }).text += `\nComponentes:\n${lineas.join('\n')}`;
+      }
+      if (r.campanas?.length && a.modo !== 'campana') (base.content[0] as { text: string }).text += `\nEl archivo trae campañas: ${r.campanas.join(', ')} (modo "campana" las importa completas).`;
+      return base;
+    }),
+  );
+
+  server.registerTool(
     'ver_cuadro',
     {
       title: 'Ver cuadro',

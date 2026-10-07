@@ -4,6 +4,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from 'electron';
 import type { Formato } from '@motionai/documento';
 import { Estudio } from '@motionai/estudio';
+import { campanasDePen, leerPen } from '@motionai/importar';
+import { readFile } from 'node:fs/promises';
 import { PuertoLocal, revisarClaude, rutaSocket, servirPuerto, type EstadoApp } from '@motionai/mcp';
 import type { NuevoProyecto, ProyectoAbierto, Turno } from '../compartido/api.js';
 import { Chat } from './chat.js';
@@ -124,6 +126,40 @@ function registrarIpc() {
       ok: res.ok, mensaje: res.mensaje, errores: res.errores, transcripcion: res.transcripcion,
       frases: res.ok ? (puerto.estudio?.documento.frases?.length ?? 0) : undefined,
     };
+  });
+  ipcMain.handle('importar', async () => {
+    if (!puerto.estudio) throw new Error(idioma === 'en' ? 'No project is open.' : 'No hay un proyecto abierto.');
+    const en = idioma === 'en';
+    const r = await dialog.showOpenDialog(ventana!, {
+      title: en ? 'Import an SVG or .pen file' : 'Importar un SVG o un .pen',
+      properties: ['openFile'],
+      filters: [{ name: 'SVG, Pencil', extensions: ['svg', 'pen'] }],
+    });
+    const archivo = r.filePaths[0];
+    if (r.canceled || !archivo) return null;
+    let modo: 'biblioteca' | 'campana' = 'biblioteca';
+    let campana: string | undefined;
+    if (archivo.toLowerCase().endsWith('.pen')) {
+      // Si el .pen trae una campaña, se puede traer completa (reemplaza escenas, frases y voz).
+      let campanas: string[] = [];
+      try { campanas = campanasDePen(leerPen(await readFile(archivo, 'utf8'))); } catch { /* el estudio da el error */ }
+      if (campanas.length) {
+        campana = campanas[0];
+        const b = await dialog.showMessageBox(ventana!, {
+          type: 'question',
+          message: en ? `This file includes the campaign “${campana}”.` : `Este archivo trae la campaña «${campana}».`,
+          detail: en
+            ? 'You can bring only its pieces to the library, or the whole campaign: scenes, animation, phrases and voice. The whole campaign replaces this project’s scenes (you can go back in History).'
+            : 'Puedes traer solo sus piezas a la biblioteca, o la campaña completa: escenas, animación, frases y voz. La campaña completa reemplaza las escenas de este proyecto (puedes volver desde el Historial).',
+          buttons: en ? ['Pieces only', 'Whole campaign', 'Cancel'] : ['Solo las piezas', 'Campaña completa', 'Cancelar'],
+          defaultId: 0, cancelId: 2,
+        });
+        if (b.response === 2) return null;
+        if (b.response === 1) modo = 'campana';
+      }
+    }
+    const res = await puerto.importar({ archivo, modo, ...(modo === 'campana' ? { campana } : {}) });
+    return { ok: res.ok, mensaje: res.mensaje, errores: res.errores, componentes: res.componentes?.length ?? 0, campana: modo === 'campana' };
   });
   ipcMain.handle('archivo:abrir', async (_e, ruta: string) => {
     const error = await shell.openPath(ruta);

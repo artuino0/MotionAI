@@ -12,6 +12,7 @@
   "dependencies": {
     "@motionai/documento": "workspace:*",
     "@motionai/estudio": "workspace:*",
+    "@motionai/importar": "workspace:*",
     "@motionai/mcp": "workspace:*",
     "@motionai/motor": "workspace:*",
     "@motionai/render": "workspace:*",

@@ -6,6 +6,7 @@ import {
   type Componente, type Escena, type Formato, type Frase, type Nodo, type Proyecto, type ProyectoEntrada,
 } from '@motionai/documento';
 import { ErrorPreparar, ErrorTrazado, preparar } from '@motionai/motor';
+import { campanaDePen, campanasDePen, componenteDeSvg, componentesDePen, leerPen } from '@motionai/importar';
 import { cargarRecursos, exportarMP4, rutaPorDefecto } from '@motionai/render';
 import { buscarEscena, buscarPieza, idsUsados } from './buscar.js';
 import { asegurarFuentes, catalogoFuentes } from './catalogo.js';
@@ -139,13 +140,13 @@ export class Estudio {
   }
 
   /** Aplica un cambio al documento si pasa el esquema, el motor y las reglas. Los cambios van uno por uno. */
-  aplicar(herramienta: string, mutar: (doc: ProyectoEntrada) => string | Promise<string>): Promise<Resultado> {
-    const tarea = this.cola.then(() => this.aplicarAhora(herramienta, mutar));
+  aplicar(herramienta: string, mutar: (doc: ProyectoEntrada) => string | Promise<string>, op: { tolerarReglas?: boolean } = {}): Promise<Resultado> {
+    const tarea = this.cola.then(() => this.aplicarAhora(herramienta, mutar, op.tolerarReglas));
     this.cola = tarea.catch(() => undefined);
     return tarea;
   }
 
-  private async aplicarAhora(herramienta: string, mutar: (doc: ProyectoEntrada) => string | Promise<string>): Promise<Resultado> {
+  private async aplicarAhora(herramienta: string, mutar: (doc: ProyectoEntrada) => string | Promise<string>, tolerarReglas = false): Promise<Resultado> {
     await this.recargarSiCambio();
     const copia = structuredClone(this.doc);
     let mensaje: string;
@@ -172,15 +173,16 @@ export class Estudio {
       throw e;
     }
     // Solo se rechaza por reglas que este cambio rompe; las que ya estaban rotas se reportan como aviso.
+    // Una importación trae el diseño tal como era: sus errores quedan como avisos para corregirlos después.
     const nuevos = analisis.errores.filter((h) => !this.hallazgos.has(claveHallazgo(h)));
-    if (nuevos.length) return this.rechazo(nuevos.map(describir));
+    if (nuevos.length && !tolerarReglas) return this.rechazo(nuevos.map(describir));
 
     this.doc = copia;
     await writeFile(this.ruta, formatearJson(copia) + '\n');
     this.mtime = statSync(this.ruta).mtimeMs;
     const version = this.historial.guardar(copia, herramienta, mensaje);
     this.hallazgos = new Set([...analisis.errores, ...analisis.avisos].map(claveHallazgo));
-    const avisos = [...analisis.errores.map((h) => `${describir(h)} (ya estaba así)`), ...analisis.avisos.map(describir)];
+    const avisos = [...analisis.errores.map((h) => `${describir(h)} (${nuevos.includes(h) ? 'viene del archivo importado' : 'ya estaba así'})`), ...analisis.avisos.map(describir)];
     if (nuevasFuentes.length) mensaje += ` Agregué la fuente ${nuevasFuentes.join(', ')} al proyecto.`;
     return { ok: true, version, mensaje, ...(avisos.length ? { avisos } : {}) };
   }
@@ -480,6 +482,93 @@ export class Estudio {
       return `Cargué ${rel} como ${tipo} (${duracion.toFixed(2)} s)${detalle}.${larga}`;
     });
     return { ...r, tramos, duracion, transcripcion };
+  }
+
+  /**
+   * Importa un SVG o un .pen. Un SVG se vuelve un componente de la biblioteca. De un .pen se traen sus
+   * piezas reusables (`modo: 'biblioteca'`, por defecto) o una campaña completa (`modo: 'campana'`):
+   * escenas, frases, voz y formato, que reemplazan a los del proyecto. Los archivos que usan las piezas
+   * se copian a recursos/.
+   */
+  async importar(op: {
+    archivo: string; modo?: 'biblioteca' | 'campana'; campana?: string; piezas?: string[];
+    id?: string; nombre?: string; tipo?: string; reemplazar?: boolean;
+  }): Promise<Resultado & { componentes?: string[]; campanas?: string[] }> {
+    const origen = path.resolve(this.base, op.archivo);
+    if (!existsSync(origen)) return this.rechazo([`No existe el archivo ${op.archivo}`]);
+    const ext = path.extname(origen).toLowerCase();
+    const avisos: string[] = [];
+    let componentes: Componente[];
+    let campana: ReturnType<typeof campanaDePen> | undefined;
+    let campanas: string[] | undefined;
+    try {
+      if (ext === '.svg') {
+        const base = path.basename(origen, ext);
+        const id = op.id ?? (base.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'svg');
+        const r = componenteDeSvg(await readFile(origen, 'utf8'), {
+          id, nombre: op.nombre ?? base, ...(op.tipo ? { tipo: op.tipo } : {}), fuentes: catalogoFuentes().map((f) => f.familia),
+        });
+        componentes = [r.componente];
+        avisos.push(...r.avisos);
+      } else if (ext === '.pen') {
+        const pen = leerPen(await readFile(origen, 'utf8'));
+        campanas = campanasDePen(pen);
+        if (op.modo === 'campana') {
+          campana = campanaDePen(pen, op.campana);
+          componentes = campana.componentes;
+          avisos.push(...campana.avisos);
+        } else {
+          const r = componentesDePen(pen, op.piezas);
+          componentes = r.componentes;
+          avisos.push(...r.avisos);
+          await this.copiarRecursos(path.dirname(origen), r.recursos);
+        }
+        if (campana) await this.copiarRecursos(path.dirname(origen), campana.recursos);
+      } else return this.rechazo([`No sé importar archivos ${ext || 'sin extensión'}: usa .svg o .pen.`]);
+    } catch (e) {
+      return this.rechazo([(e as Error).message]);
+    }
+    let nuevos: string[] = [];
+    const r = await this.aplicar('importar', (doc) => {
+      doc.biblioteca ??= [];
+      const saltados: string[] = [];
+      nuevos = [];
+      for (const c of componentes) {
+        const i = doc.biblioteca.findIndex((x) => x.id === c.id);
+        if (i >= 0 && !op.reemplazar && !campana) { saltados.push(c.id); continue; }
+        if (i >= 0) doc.biblioteca[i] = structuredClone(c);
+        else doc.biblioteca.push(structuredClone(c));
+        nuevos.push(c.id);
+      }
+      if (saltados.length) avisos.push(`Ya estaban en la biblioteca (usa reemplazar: true para cambiarlos): ${saltados.join(', ')}.`);
+      if (campana) {
+        doc.escenas = structuredClone(campana.escenas);
+        doc.frases = structuredClone(campana.frases);
+        doc.ajustes = (doc.ajustes ?? {}) as ProyectoEntrada['ajustes'];
+        const a = doc.ajustes as Objeto;
+        a.formato = campana.formato;
+        delete a.ancho; delete a.alto;
+        a.duracion = campana.duracion;
+        if (campana.voz) ((a.audio ??= {}) as Objeto).voz = { archivo: campana.voz.archivo, inicio: campana.voz.inicio, volumen: 1 };
+        return `Importé la campaña "${campana.nombre}": ${campana.escenas.length} escenas, ${campana.frases.length} frases y ${nuevos.length} componentes${campana.voz ? ', con su voz' : ''}.`;
+      }
+      return nuevos.length
+        ? `Importé ${nuevos.length === 1 ? `el componente "${nuevos[0]}"` : `${nuevos.length} componentes`} a la biblioteca.`
+        : 'No había componentes nuevos que importar.';
+    }, { tolerarReglas: true });
+    return { ...r, avisos: [...avisos, ...(r.avisos ?? [])], componentes: nuevos, ...(campanas ? { campanas } : {}) };
+  }
+
+  /** Copia al proyecto los archivos que usan las piezas importadas (rutas relativas a `desde`). */
+  private async copiarRecursos(desde: string, rutas: string[]): Promise<void> {
+    for (const rel of rutas) {
+      if (rel.includes('..') || path.isAbsolute(rel)) throw new ErrorEstudio(`La ruta ${rel} sale de la carpeta del archivo.`);
+      const o = path.join(desde, rel), d = path.join(this.base, rel);
+      if (!existsSync(o)) throw new ErrorEstudio(`Falta ${rel} junto al archivo importado.`);
+      if (existsSync(d)) continue;
+      await mkdir(path.dirname(d), { recursive: true });
+      await copyFile(o, d);
+    }
   }
 
   async verCuadro(tiempos: number[], op: OpcionesVista & { formato?: Formato } = {}): Promise<Buffer> {

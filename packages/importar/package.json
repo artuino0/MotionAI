@@ -1,5 +1,5 @@
 {
-  "name": "@motionai/estudio",
+  "name": "@motionai/importar",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,9 +8,8 @@
   },
   "dependencies": {
     "@motionai/documento": "workspace:*",
-    "@motionai/importar": "workspace:*",
     "@motionai/motor": "workspace:*",
-    "@motionai/render": "workspace:*",
-    "skia-canvas": "^3.0.0"
+    "color-name": "^2.1.0",
+    "fast-xml-parser": "^5.11.0"
   }
 }

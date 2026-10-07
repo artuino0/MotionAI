@@ -107,6 +107,11 @@ const entradaDe = (id: string) => e.escenario?.escenas.flatMap((x) => x.hijos).f
       </template>
 
       <template v-else-if="pestana === 'biblioteca'">
+        <div class="audio">
+          <button :disabled="e.importando || e.respondiendo" @click="e.importar()">
+            <Icono nombre="import" :tam="14" /> {{ e.importando ? t('medios.importando') : t('medios.importar') }}
+          </button>
+        </div>
         <p class="tenue vacio">{{ t('medios.bibliotecaNota') }}</p>
         <p v-if="!e.proyecto?.biblioteca.length" class="vacio">{{ t('medios.bibliotecaVacia') }}</p>
         <div v-for="c in e.proyecto?.biblioteca" :key="c.id" class="componente">

@@ -87,6 +87,7 @@ export const useEstudio = defineStore('estudio', {
     /** Versiones a las que se puede regresar con Ctrl+Shift+Z. */
     rehacer: [] as number[],
     cargandoAudio: null as 'voz' | 'musica' | null,
+    importando: false,
   }),
 
   getters: {
@@ -421,6 +422,24 @@ export const useEstudio = defineStore('estudio', {
         this.avisar((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
       } finally {
         this.cargandoAudio = null;
+      }
+    },
+
+    /** Importa un SVG o un .pen a la biblioteca, o una campaña completa de un .pen. */
+    async importar() {
+      if (this.respondiendo) { this.avisar(t('aviso.esperaClaude')); return; }
+      this.importando = true;
+      try {
+        const r = await api().importar();
+        if (!r) return;
+        if (!r.ok) this.avisar((r.errores ?? [r.mensaje]).join('\n'), 'error');
+        else if (r.campana) this.avisar(t('aviso.campanaImportada'), 'ok', { detalle: r.mensaje });
+        else if (r.componentes) this.avisar(t('aviso.importado', { n: r.componentes }), 'ok', { detalle: t('aviso.importadoDetalle') });
+        else this.avisar(t('aviso.nadaQueImportar'), 'info');
+      } catch (e) {
+        this.avisar((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
+      } finally {
+        this.importando = false;
       }
     },
 

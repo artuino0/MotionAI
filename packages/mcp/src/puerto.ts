@@ -28,6 +28,8 @@ export interface Cambio {
 }
 
 export type ResultadoAudio = Resultado & { tramos?: Tramo[]; duracion?: number; transcripcion?: 'whisper' | 'sin-whisper' | 'dada' | 'no' };
+export type ResultadoImportar = Resultado & { componentes?: string[]; campanas?: string[] };
+export type OpcionesImportar = Parameters<Estudio['importar']>[0];
 export interface ResultadoExportar { salida: string; cuadros: number; segundos: number; segundosRender: number }
 export interface OpcionesNuevo {
   nombre: string;
@@ -57,6 +59,7 @@ export interface PuertoEstudio {
   quitarPieza(ids: string[]): Promise<Resultado>;
   escenas(op: Parameters<Estudio['escenas']>[0]): Promise<Resultado>;
   audio(op: { archivo: string; tipo?: 'voz' | 'musica'; inicio?: number; volumen?: number; frases?: Frase[]; transcribir?: boolean; idioma?: string }): Promise<ResultadoAudio>;
+  importar(op: OpcionesImportar): Promise<ResultadoImportar>;
   buscarBiblioteca(texto?: string, tipo?: string): Promise<Componente[]>;
   verCuadro(tiempos: number[], op: { zonas?: boolean; resaltar?: string[]; formato?: Formato; lado?: number }): Promise<Buffer>;
   exportar(op: { salida?: string; formato?: Formato; desde?: number; hasta?: number }): Promise<ResultadoExportar>;
@@ -66,7 +69,7 @@ export interface PuertoEstudio {
 
 export const METODOS_PUERTO = [
   'estado', 'resumen', 'documento', 'nuevo', 'abrir', 'ajustes', 'crearPieza', 'agregarPieza', 'cambiar', 'quitarPieza',
-  'escenas', 'audio', 'buscarBiblioteca', 'verCuadro', 'exportar', 'versiones', 'volverA',
+  'escenas', 'audio', 'importar', 'buscarBiblioteca', 'verCuadro', 'exportar', 'versiones', 'volverA',
 ] as const satisfies readonly (keyof PuertoEstudio)[];
 
 export class ErrorSinProyecto extends Error {
@@ -108,7 +111,7 @@ export class PuertoLocal implements PuertoEstudio {
     return this.estudio;
   }
 
-  private async cambio(herramienta: string, r: Promise<Resultado>): Promise<Resultado> {
+  private async cambio<R extends Resultado>(herramienta: string, r: Promise<R>): Promise<R> {
     const res = await r;
     if (res.ok) for (const f of this.oyentes) f({ version: res.version, herramienta, mensaje: res.mensaje });
     return res;
@@ -154,6 +157,7 @@ export class PuertoLocal implements PuertoEstudio {
     if (r.ok) for (const f of this.oyentes) f({ version: r.version, herramienta: 'voz', mensaje: r.mensaje });
     return r;
   }
+  importar(op: OpcionesImportar) { return this.cambio('importar', this.abierto().importar(op)); }
   async buscarBiblioteca(texto?: string, tipo?: string) { return this.abierto().buscarBiblioteca(texto, tipo); }
   verCuadro(tiempos: number[], op: Parameters<PuertoEstudio['verCuadro']>[1]) { return this.abierto().verCuadro(tiempos, op); }
   exportar(op: Parameters<PuertoEstudio['exportar']>[0]) { return this.abierto().exportar({ ...op, progreso: this.op.progresoExportar }); }
