@@ -30,6 +30,10 @@ export interface Cambio {
 export type ResultadoAudio = Resultado & { tramos?: Tramo[]; duracion?: number; transcripcion?: 'whisper' | 'sin-whisper' | 'dada' | 'no' };
 export type ResultadoImportar = Resultado & { componentes?: string[]; campanas?: string[] };
 export type OpcionesImportar = Parameters<Estudio['importar']>[0];
+export type EstadoExportacion =
+  | { estado: 'listo'; resultado: ResultadoExportar }
+  | { estado: 'error'; mensaje: string }
+  | { estado: 'en-curso'; hechos: number; total: number; segundos: number };
 export interface ResultadoExportar { salida: string; cuadros: number; segundos: number; segundosRender: number }
 export interface OpcionesNuevo {
   nombre: string;
@@ -68,13 +72,18 @@ export interface PuertoEstudio {
   buscarBiblioteca(texto?: string, tipo?: string): Promise<Componente[]>;
   verCuadro(tiempos: number[], op: { zonas?: boolean; resaltar?: string[]; formato?: Formato; lado?: number }): Promise<Buffer>;
   exportar(op: { salida?: string; formato?: Formato; desde?: number; hasta?: number }): Promise<ResultadoExportar>;
+  /**
+   * Exporta sin bloquear: arranca (o sigue) la exportación, espera hasta `esperaMs` y devuelve el resultado
+   * o cuánto lleva. Llamarlo otra vez mientras corre devuelve el avance de la misma exportación.
+   */
+  exportarEnFondo(op: { salida?: string; formato?: Formato; desde?: number; hasta?: number }, esperaMs: number): Promise<EstadoExportacion>;
   versiones(limite?: number): Promise<Version[]>;
   volverA(numero: number): Promise<Resultado>;
 }
 
 export const METODOS_PUERTO = [
   'estado', 'resumen', 'documento', 'nuevo', 'abrir', 'ajustes', 'crearPieza', 'agregarPieza', 'cambiar', 'quitarPieza',
-  'escenas', 'audio', 'importar', 'revisar', 'sincronizar', 'buscarBiblioteca', 'verCuadro', 'exportar', 'versiones', 'volverA',
+  'escenas', 'audio', 'importar', 'revisar', 'sincronizar', 'buscarBiblioteca', 'verCuadro', 'exportar', 'exportarEnFondo', 'versiones', 'volverA',
 ] as const satisfies readonly (keyof PuertoEstudio)[];
 
 export class ErrorSinProyecto extends Error {
@@ -171,6 +180,24 @@ export class PuertoLocal implements PuertoEstudio {
   async buscarBiblioteca(texto?: string, tipo?: string) { return this.abierto().buscarBiblioteca(texto, tipo); }
   verCuadro(tiempos: number[], op: Parameters<PuertoEstudio['verCuadro']>[1]) { return this.abierto().verCuadro(tiempos, op); }
   exportar(op: Parameters<PuertoEstudio['exportar']>[0]) { return this.abierto().exportar({ ...op, progreso: this.op.progresoExportar }); }
+
+  private trabajo?: { promesa: Promise<void>; inicio: number; hechos: number; total: number; resultado?: ResultadoExportar; error?: string };
+
+  async exportarEnFondo(op: Parameters<PuertoEstudio['exportar']>[0], esperaMs: number): Promise<EstadoExportacion> {
+    if (!this.trabajo) {
+      const t: NonNullable<PuertoLocal['trabajo']> = { inicio: Date.now(), hechos: 0, total: 0, promesa: Promise.resolve() };
+      t.promesa = this.abierto()
+        .exportar({ ...op, progreso: (h, total) => { t.hechos = h; t.total = total; this.op.progresoExportar?.(h, total); } })
+        .then((r) => { t.resultado = r; }, (e: Error) => { t.error = e.message; });
+      this.trabajo = t;
+    }
+    const t = this.trabajo;
+    await Promise.race([t.promesa, new Promise((r) => setTimeout(r, esperaMs))]);
+    // Un resultado se entrega una vez; la siguiente llamada empieza otra exportación.
+    if (t.resultado) { this.trabajo = undefined; return { estado: 'listo', resultado: t.resultado }; }
+    if (t.error) { this.trabajo = undefined; return { estado: 'error', mensaje: t.error }; }
+    return { estado: 'en-curso', hechos: t.hechos, total: t.total, segundos: Math.round((Date.now() - t.inicio) / 1000) };
+  }
   async versiones(limite?: number) { return this.abierto().versiones(limite); }
   volverA(n: number) { return this.cambio('versiones', this.abierto().volverA(n)); }
 }

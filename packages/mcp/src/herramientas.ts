@@ -431,7 +431,9 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
     'exportar',
     {
       title: 'Exportar MP4',
-      description: 'Renderiza el video a MP4 con el mismo motor del previo y avisa cuando termina. Por defecto todo el video en el formato del proyecto.',
+      description:
+        'Renderiza el video a MP4 y te da la ruta. Por defecto todo el video en el formato del proyecto. Si tarda, contesta cuánto lleva: ' +
+        'vuelve a llamar exportar (sin argumentos) para seguirla; no busques el archivo ni la empieces de nuevo.',
       inputSchema: {
         salida: z.string().optional().describe('Ruta del MP4; por defecto la carpeta de exportación del proyecto'),
         formato: z.enum(FORMATO_IDS).optional(),
@@ -440,7 +442,13 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
       },
     },
     seguro(async (a) => {
-      const r = await p.exportar({ ...a, formato: a.formato as Formato | undefined });
+      const e = await p.exportarEnFondo({ ...a, formato: a.formato as Formato | undefined }, 40_000);
+      if (e.estado === 'error') return texto(`✗ No se pudo exportar: ${e.mensaje}`, true);
+      if (e.estado === 'en-curso') {
+        const avance = e.total ? `${Math.round((e.hechos / e.total) * 100)} % (${e.hechos} de ${e.total} cuadros)` : 'renderizando';
+        return texto(`… Sigue exportando: ${avance}, ${e.segundos} s. Llama exportar otra vez en un momento para ver cómo va.`);
+      }
+      const r = e.resultado;
       return texto(`✓ Exporté ${r.salida} · ${r.cuadros} cuadros · ${r.segundos.toFixed(2)} s de video · ${r.segundosRender.toFixed(1)} s de render.`);
     }),
   );

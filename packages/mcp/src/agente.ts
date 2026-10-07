@@ -67,10 +67,11 @@ export function configuracionMcp(op: Pick<OpcionesAgente, 'carpetaProyectos' | '
   if (op.socket) extra.push('--socket', op.socket);
   if (op.servidor) {
     const { command, args, env } = op.servidor;
-    return { mcpServers: { [NOMBRE_MCP]: { command, args: [...args, ...extra], ...(env ? { env } : {}) } } };
+    return { mcpServers: { [NOMBRE_MCP]: { command, args: [...args, ...extra], ...(env ? { env } : {}), timeout: TIEMPO_HERRAMIENTA_MS } } };
   }
   const tsx = createRequire(import.meta.url).resolve('tsx/cli');
-  return { mcpServers: { [NOMBRE_MCP]: { command: process.execPath, args: ['--disable-warning=ExperimentalWarning', tsx, servidorTs(), ...extra] } } };
+  // timeout: cuánto puede tardar una herramienta sin dar señales (ver_cuadro o revisar con HyperFrames pueden tardar).
+  return { mcpServers: { [NOMBRE_MCP]: { command: process.execPath, args: ['--disable-warning=ExperimentalWarning', tsx, servidorTs(), ...extra], timeout: TIEMPO_HERRAMIENTA_MS } } };
 }
 
 /**
@@ -140,7 +141,11 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
   // Si la app corre dentro de otra sesión de Claude Code, el hijo no debe heredar su id de sesión.
   const { CLAUDE_CODE_SESSION_ID: _, ...resto } = process.env;
   // Exportar un video tarda más que el minuto que Claude Code espera por defecto a una herramienta MCP.
-  const env = { ...resto, MCP_TOOL_TIMEOUT: resto.MCP_TOOL_TIMEOUT ?? String(TIEMPO_HERRAMIENTA_MS) };
+  const env = {
+    ...resto,
+    MCP_TOOL_TIMEOUT: resto.MCP_TOOL_TIMEOUT ?? String(TIEMPO_HERRAMIENTA_MS),
+    CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT: resto.CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT ?? String(TIEMPO_HERRAMIENTA_MS),
+  };
   const hijo = spawn(op.claude ?? 'claude', argumentosClaude(op, rutaConfig), {
     cwd,
     env,

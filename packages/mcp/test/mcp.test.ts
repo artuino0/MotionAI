@@ -91,3 +91,20 @@ describe('lanzar Claude', () => {
     expect(sin).not.toContain('--effort');
   });
 });
+
+describe('exportar sin bloquear', () => {
+  it('devuelve el avance mientras exporta y el resultado una sola vez', async () => {
+    const carpeta = await mkdtemp(path.join(os.tmpdir(), 'mcp-exp-'));
+    const p = new PuertoLocal(carpeta);
+    await p.nuevo({ nombre: 'Corto', duracion: 1 });
+    const primero = await p.exportarEnFondo({}, 0);
+    expect(primero.estado).toBe('en-curso');
+    let e = primero;
+    for (let i = 0; i < 60 && e.estado === 'en-curso'; i++) e = await p.exportarEnFondo({}, 1000);
+    expect(e.estado).toBe('listo');
+    if (e.estado === 'listo') expect(e.resultado.segundos).toBe(1);
+    // Entregado el resultado, la siguiente llamada empieza otra exportación.
+    expect((await p.exportarEnFondo({}, 0)).estado).toBe('en-curso');
+  }, 90_000);
+});
+
