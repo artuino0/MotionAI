@@ -4,7 +4,7 @@
  * así un cambio entre versiones de Claude Code se arregla aquí.
  */
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 const servidorTs = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'servidor.ts');
 const NOMBRE_MCP = 'motionai';
 
+export const ESFUERZOS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Esfuerzo = (typeof ESFUERZOS)[number];
+
 export interface OpcionesAgente {
   mensaje: string;
   /** Carpeta donde se crean los proyectos nuevos. */
@@ -22,7 +25,10 @@ export interface OpcionesAgente {
   proyecto?: string;
   /** Sesión de Claude Code a continuar (una por proyecto, así recuerda lo que ya hizo). */
   sesion?: string;
+  /** Modelo de Claude: un alias (`opus`, `sonnet`…) o un nombre completo. Sin él, el de Claude Code. */
   modelo?: string;
+  /** Esfuerzo de razonamiento. Sin él, el de Claude Code. */
+  esfuerzo?: Esfuerzo;
   /** Ejecutable de Claude Code; por defecto `claude` del PATH. */
   claude?: string;
   cwd?: string;
@@ -70,6 +76,7 @@ export function argumentosClaude(op: OpcionesAgente, rutaConfig: string): string
   ];
   if (op.sesion) args.push('--resume', op.sesion);
   if (op.modelo) args.push('--model', op.modelo);
+  if (op.esfuerzo) args.push('--effort', op.esfuerzo);
   if (op.sistema) args.push('--append-system-prompt', op.sistema);
   return args;
 }
@@ -115,10 +122,13 @@ export async function lanzarAgente(op: OpcionesAgente, alEvento: (e: EventoAgent
   const dir = await mkdtemp(path.join(os.tmpdir(), 'motionai-agente-'));
   const rutaConfig = path.join(dir, 'mcp.json');
   await writeFile(rutaConfig, JSON.stringify(configuracionMcp(op)));
+  // spawn falla con ENOENT (como si no existiera claude) cuando falta la carpeta de trabajo.
+  const cwd = op.cwd ?? op.carpetaProyectos;
+  await mkdir(cwd, { recursive: true });
   // Si la app corre dentro de otra sesión de Claude Code, el hijo no debe heredar su id de sesión.
   const { CLAUDE_CODE_SESSION_ID: _, ...env } = process.env;
   const hijo = spawn(op.claude ?? 'claude', argumentosClaude(op, rutaConfig), {
-    cwd: op.cwd ?? op.carpetaProyectos,
+    cwd,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     ...(op.senal ? { signal: op.senal } : {}),

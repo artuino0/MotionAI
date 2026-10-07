@@ -102,11 +102,16 @@ async function principal() {
   }
   check('Clic en el monitor agrega la pieza al mensaje', !!referida, referida);
   await w.screenshot({ path: path.join(SALIDA, '3_pieza_referida.png') });
+  // El cambio lo hace otro modelo, elegido en el chat.
+  await w.locator('.opciones select').first().selectOption('sonnet');
+  await w.locator('.opciones select').nth(1).selectOption('medium');
   await w.locator('textarea').fill('Haz esta pieza un poco más grande y dale un ciclo suave para que no se quede quieta.');
   await w.keyboard.press('Enter');
   const t2 = await esperarRespuesta(w, '3_cambio');
   const version2 = Number((await w.locator('.barra .version').textContent())?.match(/\d+/)?.[0]);
+  const modelo = ((await w.locator('.turno .modelo').last().textContent()) ?? '').trim();
   check('Claude cambió la pieza señalada', version2 > version1, `versión ${version1} → ${version2} en ${minutos(t2)}`);
+  check('Responde el modelo y esfuerzo elegidos en el chat', /^Sonnet/.test(modelo) && /medio/.test(modelo), modelo);
   await w.screenshot({ path: path.join(SALIDA, '3_cambio_hecho.png') });
 
   // 4. Ajuste de proyecto a mano.

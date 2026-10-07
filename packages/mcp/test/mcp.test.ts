@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
 import { PuertoLocal, crearServidor, puertoRemoto, servirPuerto } from '../src/index.js';
-import { registrarHerramientas, INSTRUCCIONES } from '../src/index.js';
+import { argumentosClaude, registrarHerramientas, INSTRUCCIONES } from '../src/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 async function conectar(remoto = false) {
@@ -74,4 +74,16 @@ describe('servidor MCP', () => {
     expect(exp.texto).toMatch(/✓ Exporté .*cafe_luna\.mp4 · 90 cuadros/);
     expect((await llamar('versiones')).texto).toMatch(/^3 · .* cambiar/);
   }, 60_000);
+});
+
+describe('lanzar Claude', () => {
+  it('pasa el modelo y el esfuerzo solo si se eligen', () => {
+    const base = { mensaje: 'hola', carpetaProyectos: '/tmp' };
+    const con = argumentosClaude({ ...base, modelo: 'opus', esfuerzo: 'high' }, '/tmp/mcp.json');
+    expect(con.slice(con.indexOf('--model'), con.indexOf('--model') + 2)).toEqual(['--model', 'opus']);
+    expect(con.slice(con.indexOf('--effort'), con.indexOf('--effort') + 2)).toEqual(['--effort', 'high']);
+    const sin = argumentosClaude(base, '/tmp/mcp.json');
+    expect(sin).not.toContain('--model');
+    expect(sin).not.toContain('--effort');
+  });
 });

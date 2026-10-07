@@ -3,7 +3,7 @@ import { markRaw } from 'vue';
 import { recursosDe, validarProyecto, type Nodo, type Proyecto, type ProyectoEntrada } from '@motionai/documento';
 import { escenaEn, preparar, type Entorno, type Escenario, type EscenaPreparada } from '@motionai/motor';
 import { cargarRecursosNavegador } from '@motionai/visor';
-import type { EstadoClaude, ProyectoAbierto, Referencia, Turno } from '../../compartido/api.js';
+import { ESFUERZOS_APP, MODELOS, type EstadoClaude, type OpcionesClaude, type ProyectoAbierto, type Referencia, type Turno } from '../../compartido/api.js';
 import { t } from '../i18n.js';
 import { indicePiezas, nombreEscena, nombreRuta } from '../util/nombres.js';
 
@@ -74,6 +74,8 @@ export const useEstudio = defineStore('estudio', {
     verAjustes: false,
     verAtajos: false,
     lineaAbierta: true,
+    /** Modelo y esfuerzo con que trabaja Claude; vacío usa lo que tenga configurado Claude Code. */
+    opcionesClaude: { modelo: '', esfuerzo: '' } as Required<OpcionesClaude>,
     exportando: null as { hechos: number; total: number } | null,
     turnos: [] as Turno[],
     avisos: [] as Aviso[],
@@ -127,7 +129,12 @@ export const useEstudio = defineStore('estudio', {
       });
       api().alTurno((turno) => this.recibirTurno(turno));
       api().alExportar((p) => (this.exportando = p));
-      try { this.lineaAbierta = localStorage.getItem('motionai.linea') !== 'cerrada'; } catch { /* sin almacenamiento */ }
+      try {
+        this.lineaAbierta = localStorage.getItem('motionai.linea') !== 'cerrada';
+        const o = JSON.parse(localStorage.getItem('motionai.claude') ?? '{}') as OpcionesClaude;
+        if ((MODELOS as readonly string[]).includes(o.modelo ?? '')) this.opcionesClaude.modelo = o.modelo!;
+        if ((ESFUERZOS_APP as readonly string[]).includes(o.esfuerzo ?? '')) this.opcionesClaude.esfuerzo = o.esfuerzo!;
+      } catch { /* sin almacenamiento */ }
       this.claude = await api().revisarClaude();
       const actual = await api().proyectoActual();
       if (actual) await this.abrir(actual);
@@ -347,7 +354,12 @@ export const useEstudio = defineStore('estudio', {
     async enviar(texto: string) {
       const refs = JSON.parse(JSON.stringify(this.referencias)) as Referencia[];
       this.referencias = [];
-      await api().enviar(texto, refs);
+      await api().enviar(texto, refs, { ...this.opcionesClaude });
+    },
+
+    cambiarOpcionesClaude(o: OpcionesClaude) {
+      Object.assign(this.opcionesClaude, o);
+      try { localStorage.setItem('motionai.claude', JSON.stringify(this.opcionesClaude)); } catch { /* sin almacenamiento */ }
     },
 
     async volverA(version: number, preguntar = true): Promise<boolean> {

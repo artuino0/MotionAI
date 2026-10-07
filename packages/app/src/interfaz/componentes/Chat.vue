@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import type { Referencia, Turno } from '../../compartido/api.js';
+import { ESFUERZOS_APP, MODELOS, type Esfuerzo, type Modelo, type Referencia, type Turno } from '../../compartido/api.js';
 import { t, type Clave } from '../i18n.js';
 import { useEstudio } from '../tiendas/estudio.js';
 import { markdown } from '../util/markdown.js';
@@ -33,6 +33,16 @@ function usarEjemplo(k: Clave) {
   void nextTick(() => campo.value?.focus());
 }
 const cancelar = () => void window.motionai.cancelar();
+
+const nombreModelo = (m: string) => (m ? t(`chat.modelo.${m}` as Clave) : t('chat.predeterminado'));
+const nombreEsfuerzo = (x: string) => (x ? t(`chat.esfuerzo.${x}` as Clave) : t('chat.predeterminado'));
+/** «claude-opus-5-5» → «Opus 5.5»; deja como está lo que no reconoce. */
+function modeloLegible(id: string): string {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(id);
+  if (!m) return id;
+  return `${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}`;
+}
+const detalleModelo = (x: Turno) => [x.modelo && modeloLegible(x.modelo), x.esfuerzo && nombreEsfuerzo(x.esfuerzo)].filter(Boolean).join(' · ');
 
 // Solo baja sola si el usuario ya estaba abajo: no le quita lo que está releyendo.
 let pegado = true;
@@ -97,6 +107,7 @@ async function deshacer(x: Turno) {
             <span v-if="x.herramientas?.length" class="tenue">· {{ t('chat.pasos', { n: x.herramientas.length }) }}</span>
           </div>
           <div v-if="x.texto" class="respuesta" v-html="markdown(x.texto)" />
+          <div v-if="!x.enCurso && detalleModelo(x)" class="modelo tenue">{{ detalleModelo(x) }}</div>
           <div v-if="x.error" class="error" role="alert"><Icono nombre="triangle-alert" :tam="14" /> {{ x.error }}</div>
           <div v-if="!x.enCurso && x.herramientas?.length" class="pasos">
             <button class="fantasma resumen" :aria-expanded="abiertas.has(x.id)" @click="alternar(x.id)">
@@ -133,7 +144,21 @@ async function deshacer(x: Turno) {
         :placeholder="conectado ? t('chat.placeholder') : t('chat.placeholderSinClaude')" @keydown="tecla"
       />
       <div class="acciones">
-        <span class="tenue estado">{{ e.respondiendo ? t('chat.trabajando') : '' }}</span>
+        <div class="opciones">
+          <label :title="t('chat.modeloTitulo')">
+            <span class="solo-lector">{{ t('chat.modelo') }}</span>
+            <select :value="e.opcionesClaude.modelo" :disabled="e.respondiendo" @change="e.cambiarOpcionesClaude({ modelo: ($event.target as HTMLSelectElement).value as Modelo })">
+              <option v-for="m in MODELOS" :key="m" :value="m">{{ `${t('chat.modelo')}: ${nombreModelo(m)}` }}</option>
+            </select>
+          </label>
+          <label :title="t('chat.esfuerzoTitulo')">
+            <span class="solo-lector">{{ t('chat.esfuerzo') }}</span>
+            <select :value="e.opcionesClaude.esfuerzo" :disabled="e.respondiendo" @change="e.cambiarOpcionesClaude({ esfuerzo: ($event.target as HTMLSelectElement).value as Esfuerzo | '' })">
+              <option v-for="x in ESFUERZOS_APP" :key="x" :value="x">{{ `${t('chat.esfuerzo')}: ${nombreEsfuerzo(x)}` }}</option>
+            </select>
+          </label>
+        </div>
+        <span v-if="e.respondiendo" class="tenue estado">{{ t('chat.trabajando') }}</span>
         <button v-if="e.respondiendo" class="peligro" @click="cancelar"><Icono nombre="x" :tam="14" /> {{ t('chat.detener') }}</button>
         <button v-else class="primario" :disabled="!puedeEnviar" @click="enviar">{{ t('chat.enviar') }}</button>
       </div>
@@ -179,6 +204,10 @@ async function deshacer(x: Turno) {
 .quitar:hover:not(:disabled) { background: #ffffff1a; border: none; color: var(--texto); }
 textarea { resize: none; width: 100%; line-height: 1.5; }
 .grande textarea { font-size: 14px; }
-.acciones { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.acciones { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.opciones { display: flex; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.opciones select { font-size: 12.5px; padding: 4px 6px; max-width: 160px; }
+.acciones > button { margin-left: auto; }
+.modelo { font-size: 12px; }
 .estado { font-size: 12.5px; }
 </style>

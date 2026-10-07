@@ -25,7 +25,7 @@ const api: ApiMotionAI = {
   importar: () => ipcRenderer.invoke('importar'),
   idioma: (i) => ipcRenderer.send('idioma', i),
   chat: () => ipcRenderer.invoke('chat'),
-  enviar: (t, r) => ipcRenderer.invoke('chat:enviar', t, r),
+  enviar: (t, r, o) => ipcRenderer.invoke('chat:enviar', t, r, o),
   cancelar: () => ipcRenderer.invoke('chat:cancelar'),
   estadoApp: (e) => ipcRenderer.send('estado-app', e),
   alCambiar: escuchar('proyecto:cambio'),

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { lanzarAgente, type EventoAgente, type OpcionesAgente, type Referencia } from '@motionai/mcp';
+import { lanzarAgente, type Esfuerzo, type EventoAgente, type OpcionesAgente, type Referencia } from '@motionai/mcp';
 import type { Turno } from '../compartido/api.js';
 
 /** Describe las referencias que tocó el usuario para que viajen con su mensaje. */
@@ -72,11 +72,14 @@ export class Chat {
   }
 
   /** Manda un mensaje. `alTurno` recibe cada turno cada vez que cambia; `version` da la versión actual del documento. */
-  async enviar(texto: string, referencias: Referencia[], version: () => number, alTurno: (t: Turno) => void, idioma: 'es' | 'en' = 'es'): Promise<void> {
+  async enviar(
+    texto: string, referencias: Referencia[], version: () => number, alTurno: (t: Turno) => void, idioma: 'es' | 'en' = 'es',
+    opciones: { modelo?: string; esfuerzo?: Esfuerzo } = {},
+  ): Promise<void> {
     if (this.control) throw new Error(idioma === 'en' ? 'Claude is still answering the previous message.' : 'Claude todavía está respondiendo el mensaje anterior.');
     const id = () => Math.random().toString(36).slice(2, 10);
     const usuario: Turno = { id: id(), rol: 'usuario', texto, fecha: new Date().toISOString(), ...(referencias.length ? { referencias } : {}) };
-    const claude: Turno = { id: id(), rol: 'claude', texto: '', fecha: new Date().toISOString(), herramientas: [], versionAntes: version(), enCurso: true };
+    const claude: Turno = { id: id(), rol: 'claude', texto: '', fecha: new Date().toISOString(), herramientas: [], versionAntes: version(), enCurso: true, ...(opciones.esfuerzo ? { esfuerzo: opciones.esfuerzo } : {}) };
     this.datos.turnos.push(usuario, claude);
     alTurno(usuario);
     alTurno(claude);
@@ -85,6 +88,7 @@ export class Chat {
       switch (e.tipo) {
         case 'inicio':
           this.datos.sesion = e.sesion;
+          if (e.modelo) claude.modelo = e.modelo;
           break;
         case 'texto':
           claude.texto += (claude.texto ? '\n\n' : '') + e.texto;
@@ -108,7 +112,7 @@ export class Chat {
     };
     try {
       await lanzarAgente(
-        { ...this.lanzar, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA[idioma] },
+        { ...this.lanzar, ...opciones, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA[idioma] },
         alEvento,
       );
     } catch (e) {

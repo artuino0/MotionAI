@@ -1,9 +1,20 @@
 /** Lo que el proceso principal le ofrece a la interfaz (a través del preload). */
 import type { ProyectoEntrada } from '@motionai/documento';
 import type { Resultado, Version } from '@motionai/estudio';
-import type { EstadoApp, EstadoClaude, EventoAgente, Referencia } from '@motionai/mcp';
+import type { Esfuerzo, EstadoApp, EstadoClaude, EventoAgente, Referencia } from '@motionai/mcp';
 
-export type { EstadoApp, EstadoClaude, EventoAgente, Referencia };
+export type { Esfuerzo, EstadoApp, EstadoClaude, EventoAgente, Referencia };
+
+/** Modelos que se ofrecen, como alias de Claude Code (siempre apuntan a la versión más nueva). Vacío: el de Claude Code. */
+export const MODELOS = ['', 'opus', 'sonnet', 'haiku', 'fable'] as const;
+export type Modelo = (typeof MODELOS)[number];
+export const ESFUERZOS_APP = ['', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+/** Con qué modelo y esfuerzo trabaja Claude. */
+export interface OpcionesClaude {
+  modelo?: Modelo;
+  esfuerzo?: Esfuerzo | '';
+}
 
 export interface ProyectoAbierto {
   ruta: string;
@@ -45,6 +56,9 @@ export interface Turno {
   versionDespues?: number;
   error?: string;
   enCurso?: boolean;
+  /** Modelo que contestó (el que reporta Claude Code) y esfuerzo pedido. */
+  modelo?: string;
+  esfuerzo?: Esfuerzo;
 }
 
 export interface NuevoProyecto {
@@ -76,7 +90,7 @@ export interface ApiMotionAI {
   /** Idioma de la interfaz: el principal lo usa en sus diálogos y para pedirle a Claude que responda igual. */
   idioma(i: 'es' | 'en'): void;
   chat(): Promise<Turno[]>;
-  enviar(texto: string, referencias: Referencia[]): Promise<void>;
+  enviar(texto: string, referencias: Referencia[], opciones?: OpcionesClaude): Promise<void>;
   cancelar(): Promise<void>;
   /** La interfaz avisa qué ve el usuario, para leer_estado. */
   estadoApp(e: EstadoApp): void;

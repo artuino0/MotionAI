@@ -6,8 +6,15 @@ import type { Formato } from '@motionai/documento';
 import { Estudio } from '@motionai/estudio';
 import { campanasDePen, leerPen } from '@motionai/importar';
 import { readFile } from 'node:fs/promises';
-import { PuertoLocal, revisarClaude, rutaSocket, servirPuerto, type EstadoApp } from '@motionai/mcp';
-import type { NuevoProyecto, ProyectoAbierto, Turno } from '../compartido/api.js';
+import { PuertoLocal, revisarClaude, rutaSocket, servirPuerto, type Esfuerzo, type EstadoApp } from '@motionai/mcp';
+import { ESFUERZOS_APP, MODELOS, type NuevoProyecto, type OpcionesClaude, type ProyectoAbierto, type Turno } from '../compartido/api.js';
+
+/** Solo pasan a la línea de comandos los valores de las listas. */
+function opcionesValidas(o: OpcionesClaude | undefined): { modelo?: string; esfuerzo?: Esfuerzo } {
+  const modelo = o?.modelo && (MODELOS as readonly string[]).includes(o.modelo) ? o.modelo : undefined;
+  const esfuerzo = o?.esfuerzo && (ESFUERZOS_APP as readonly string[]).includes(o.esfuerzo) ? (o.esfuerzo as Esfuerzo) : undefined;
+  return { ...(modelo ? { modelo } : {}), ...(esfuerzo ? { esfuerzo } : {}) };
+}
 import { Chat } from './chat.js';
 import { Recientes } from './recientes.js';
 
@@ -167,11 +174,11 @@ function registrarIpc() {
   });
   ipcMain.on('idioma', (_e, i: 'es' | 'en') => (idioma = i === 'en' ? 'en' : 'es'));
   ipcMain.handle('chat', () => chat?.cargar() ?? []);
-  ipcMain.handle('chat:enviar', (_e, texto: string, referencias) => {
+  ipcMain.handle('chat:enviar', (_e, texto: string, referencias, opciones?: OpcionesClaude) => {
     if (!chat) throw new Error(idioma === 'en' ? 'No project is open.' : 'No hay un proyecto abierto.');
     estadoApp = { ...estadoApp, referencias };
     // No se espera: la respuesta llega por chat:turno.
-    void chat.enviar(texto, referencias, () => puerto.estudio?.version ?? 0, (t: Turno) => enviar('chat:turno', t), idioma);
+    void chat.enviar(texto, referencias, () => puerto.estudio?.version ?? 0, (t: Turno) => enviar('chat:turno', t), idioma, opcionesValidas(opciones));
   });
   ipcMain.handle('chat:cancelar', () => chat?.cancelar());
   ipcMain.on('estado-app', (_e, e: EstadoApp) => (estadoApp = e));
