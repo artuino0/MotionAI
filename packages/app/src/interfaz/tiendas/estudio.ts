@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { recursosDe, validarProyecto, type Proyecto, type ProyectoEntrada } from '@motionai/documento';
-import { escenaEn, preparar, type Entorno, type Escenario } from '@motionai/motor';
+import { recursosDe, validarProyecto, type Nodo, type Proyecto, type ProyectoEntrada } from '@motionai/documento';
+import { escenaEn, preparar, type Entorno, type Escenario, type EscenaPreparada } from '@motionai/motor';
 import { cargarRecursosNavegador } from '@motionai/visor';
 import type { EstadoClaude, ProyectoAbierto, Referencia, Turno } from '../../compartido/api.js';
+import { t } from '../i18n.js';
+import { indicePiezas, nombreEscena, nombreRuta } from '../util/nombres.js';
 
 export type Vista = 'limpia' | 'tiktok' | 'reels' | 'facebook';
 export type Lateral = 'chat' | 'inspector' | 'historial';
@@ -12,13 +14,43 @@ interface Aviso {
   id: number;
   texto: string;
   tipo: 'info' | 'error' | 'ok';
-  accion?: { texto: string; hacer: () => void };
+  detalle?: string;
+  acciones?: { texto: string; hacer: () => void }[];
+}
+
+export interface Dialogo {
+  titulo: string;
+  texto: string;
+  aceptar: string;
+  cancelar?: string;
+  peligro?: boolean;
+  responder: (si: boolean) => void;
 }
 
 const api = () => window.motionai;
 let reloj = 0;
 let audios: { el: HTMLAudioElement; inicio: number }[] = [];
 let siguienteAviso = 1;
+let temporizadorResaltado: ReturnType<typeof setTimeout> | undefined;
+
+/** Segundo en que una escena ya se ve completa: después de la última entrada, antes del corte. */
+function cuadroEnReposo(e: EscenaPreparada, id?: string): number {
+  const np = id ? e.hijos.find((h) => h.nodo.id === id) : undefined;
+  const entradas = (np ? [np] : e.hijos).map((h) => (h.entra ? h.entra.en + h.entra.dur : e.inicio));
+  const listo = Math.max(e.inicio, ...entradas) + 0.35;
+  return Math.max(e.inicio, Math.min(e.fin - 0.05, Math.max(listo, e.inicio + (e.fin - e.inicio) * 0.5)));
+}
+
+/** Ids de piezas que cambiaron entre dos versiones del documento. */
+function piezasCambiadas(antes: ProyectoEntrada | undefined, ahora: ProyectoEntrada): string[] {
+  const huella = (d?: ProyectoEntrada) => {
+    const m = new Map<string, string>();
+    for (const e of d?.escenas ?? []) for (const h of e.hijos) m.set(h.id, JSON.stringify(h));
+    return m;
+  };
+  const a = huella(antes), b = huella(ahora);
+  return [...b].filter(([id, j]) => a.get(id) !== j).map(([id]) => id);
+}
 
 export const useEstudio = defineStore('estudio', {
   state: () => ({
@@ -26,6 +58,7 @@ export const useEstudio = defineStore('estudio', {
     abierto: null as ProyectoAbierto | null,
     proyecto: null as Proyecto | null,
     escenario: null as Escenario | null,
+    indice: markRaw(new Map()) as Map<string, Nodo>,
     entorno: markRaw({ imagen: () => undefined }) as Entorno,
     clavesRecursos: '',
     errorDocumento: null as string | null,
@@ -39,37 +72,85 @@ export const useEstudio = defineStore('estudio', {
     referencias: [] as Referencia[],
     lateral: 'chat' as Lateral,
     verAjustes: false,
+    verAtajos: false,
+    lineaAbierta: true,
     exportando: null as { hechos: number; total: number } | null,
     turnos: [] as Turno[],
     avisos: [] as Aviso[],
+    dialogo: null as Dialogo | null,
+    /** Pieza que Claude acaba de cambiar, para marcarla un momento en el monitor. */
+    resaltado: null as string | null,
+    /** Escena donde Claude está trabajando ahora. */
+    trabajandoEn: null as string | null,
+    /** El monitor sigue a Claude hasta que el usuario mueve el cabezal. */
+    seguirAClaude: true,
+    /** Versiones a las que se puede regresar con Ctrl+Shift+Z. */
+    rehacer: [] as number[],
   }),
 
   getters: {
     duracion: (s) => s.escenario?.duracion ?? 0,
     escenaActual: (s) => (s.escenario ? escenaEn(s.escenario, s.tiempo) : undefined),
-    respondiendo: (s) => s.turnos.some((t) => t.enCurso),
+    respondiendo: (s) => s.turnos.some((x) => x.enCurso),
+    /** Hay algo que exportar: al menos una pieza en alguna escena. */
+    tieneContenido: (s) => !!s.proyecto?.escenas.some((e) => e.hijos.length),
   },
 
   actions: {
-    avisar(texto: string, tipo: Aviso['tipo'] = 'info', accion?: Aviso['accion']) {
+    nombre(ruta: string): string {
+      return nombreRuta(ruta, this.proyecto, this.indice);
+    },
+
+    avisar(texto: string, tipo: Aviso['tipo'] = 'info', extra: Pick<Aviso, 'detalle' | 'acciones'> = {}) {
       const id = siguienteAviso++;
-      this.avisos.push({ id, texto, tipo, accion });
-      setTimeout(() => (this.avisos = this.avisos.filter((a) => a.id !== id)), accion ? 9000 : 4500);
+      this.avisos.push({ id, texto, tipo, ...extra });
+      // Los errores y los avisos con acciones se quedan hasta que el usuario los cierra.
+      if (tipo !== 'error' && !extra.acciones) setTimeout(() => this.cerrarAviso(id), 4500);
+    },
+
+    cerrarAviso(id: number) {
+      this.avisos = this.avisos.filter((a) => a.id !== id);
+    },
+
+    confirmar(d: Omit<Dialogo, 'responder'>): Promise<boolean> {
+      this.dialogo?.responder(false);
+      return new Promise((ok) => {
+        this.dialogo = { ...d, responder: (si) => { this.dialogo = null; ok(si); } };
+      });
     },
 
     async iniciar() {
       api().alCambiar((c) => {
         void this.aplicarDocumento(c.documento, c.version);
       });
-      api().alTurno((t) => {
-        const i = this.turnos.findIndex((x) => x.id === t.id);
-        if (i >= 0) this.turnos[i] = t;
-        else this.turnos.push(t);
-      });
+      api().alTurno((turno) => this.recibirTurno(turno));
       api().alExportar((p) => (this.exportando = p));
+      try { this.lineaAbierta = localStorage.getItem('motionai.linea') !== 'cerrada'; } catch { /* sin almacenamiento */ }
       this.claude = await api().revisarClaude();
       const actual = await api().proyectoActual();
       if (actual) await this.abrir(actual);
+    },
+
+    recibirTurno(turno: Turno) {
+      const i = this.turnos.findIndex((x) => x.id === turno.id);
+      const antes = i >= 0 ? this.turnos[i] : undefined;
+      if (i >= 0) this.turnos[i] = turno;
+      else this.turnos.push(turno);
+      if (turno.rol !== 'claude') return;
+      if (turno.enCurso && !antes) {
+        // Empieza una respuesta: el monitor sigue a Claude hasta que el usuario lo mueva.
+        this.seguirAClaude = true;
+        this.rehacer = [];
+      }
+      if (antes?.enCurso && !turno.enCurso) {
+        this.trabajandoEn = null;
+        const cambio = (turno.versionDespues ?? 0) > (turno.versionAntes ?? 0);
+        // El primer video se muestra completo al terminar: es el momento que el usuario esperaba.
+        if (cambio && (turno.versionAntes ?? 0) <= 1 && !this.reproduciendo) {
+          this.irA(0, false);
+          this.reproducir();
+        }
+      }
     },
 
     async abrir(p: ProyectoAbierto) {
@@ -79,11 +160,20 @@ export const useEstudio = defineStore('estudio', {
       this.seleccion = null;
       this.referencias = [];
       this.clavesRecursos = '';
-      await this.aplicarDocumento(p.documento, p.version);
+      this.rehacer = [];
       this.turnos = await api().chat();
+      await this.aplicarDocumento(p.documento, p.version);
+      // Abrir en un cuadro con contenido, no en el primer cuadro vacío.
+      const e = this.escenario?.escenas.find((x) => x.hijos.length);
+      if (e) this.tiempo = cuadroEnReposo(e);
     },
 
     async cerrar() {
+      if (this.respondiendo) {
+        const si = await this.confirmar({ titulo: t('dlg.salirTitulo'), texto: t('dlg.salirTexto'), aceptar: t('dlg.salir'), peligro: true });
+        if (!si) return;
+        await api().cancelar();
+      }
       this.pausar();
       await api().cerrarProyecto();
       this.abierto = null;
@@ -95,6 +185,7 @@ export const useEstudio = defineStore('estudio', {
     /** Valida el documento, carga fuentes e imágenes nuevas y lo prepara para el motor. */
     async aplicarDocumento(doc: ProyectoEntrada, version: number) {
       if (!this.abierto) return;
+      const anterior = this.abierto.documento;
       this.abierto = { ...this.abierto, documento: doc, version };
       this.version = version;
       const r = validarProyecto(doc);
@@ -108,12 +199,13 @@ export const useEstudio = defineStore('estudio', {
       if (claves !== this.clavesRecursos) {
         // Las fuentes se cargan antes de preparar: el motor mide los textos al dibujar y guarda esas medidas.
         const { entorno, faltantes } = await cargarRecursosNavegador(r.proyecto, 'proyecto://local/');
-        if (faltantes.length) this.avisar(`Faltan archivos: ${faltantes.join(', ')}`, 'error');
+        if (faltantes.length) this.avisar(t('aviso.faltan', { lista: faltantes.join(', ') }), 'error');
         this.entorno = markRaw(entorno);
         this.clavesRecursos = claves;
         this.prepararAudio(r.proyecto);
       }
       this.proyecto = markRaw(r.proyecto);
+      this.indice = markRaw(indicePiezas(r.proyecto));
       try {
         this.escenario = markRaw(preparar(r.proyecto));
         if (this.tiempo > this.escenario.duracion) this.tiempo = this.escenario.duracion;
@@ -121,6 +213,22 @@ export const useEstudio = defineStore('estudio', {
         this.errorDocumento = (e as Error).message;
       }
       this.revision++;
+      if (this.respondiendo) this.seguirCambio(anterior, doc);
+    },
+
+    /** Mientras Claude trabaja, lleva el monitor a la pieza que cambió y la marca un momento. */
+    seguirCambio(antes: ProyectoEntrada, ahora: ProyectoEntrada) {
+      const esc = this.escenario;
+      if (!esc) return;
+      const [id] = piezasCambiadas(antes, ahora);
+      const escena = id ? esc.escenas.find((e) => e.hijos.some((h) => h.nodo.id === id)) : undefined;
+      if (!escena) return;
+      this.trabajandoEn = nombreEscena(this.proyecto, escena.escena.id);
+      if (this.seguirAClaude && !this.reproduciendo) this.tiempo = cuadroEnReposo(escena, id);
+      this.resaltado = id!;
+      clearTimeout(temporizadorResaltado);
+      temporizadorResaltado = setTimeout(() => (this.resaltado = null), 1800);
+      this.informar();
     },
 
     prepararAudio(p: Proyecto) {
@@ -134,10 +242,23 @@ export const useEstudio = defineStore('estudio', {
         });
     },
 
-    irA(t: number) {
-      this.tiempo = Math.max(0, Math.min(this.duracion, t));
+    /** Mueve el cabezal. Si lo mueve el usuario mientras Claude trabaja, el monitor deja de seguir a Claude. */
+    irA(segundo: number, porUsuario = true) {
+      if (porUsuario && this.respondiendo) this.seguirAClaude = false;
+      this.tiempo = Math.max(0, Math.min(this.duracion, segundo));
       if (this.reproduciendo) for (const a of audios) a.el.currentTime = Math.max(0, this.tiempo - a.inicio);
       this.informar();
+    },
+
+    saltarEscena(dir: 1 | -1) {
+      const esc = this.escenario;
+      if (!esc) return;
+      const inicios = esc.escenas.map((x) => x.inicio);
+      const destino = dir > 0
+        ? inicios.find((i) => i > this.tiempo + 1e-3) ?? esc.duracion
+        : [...inicios].reverse().find((i) => i < this.tiempo - 0.05) ?? 0;
+      this.pausar();
+      this.irA(destino);
     },
 
     reproducir() {
@@ -173,7 +294,16 @@ export const useEstudio = defineStore('estudio', {
 
     alternar() {
       if (this.reproduciendo) this.pausar();
-      else this.reproducir();
+      else {
+        if (this.respondiendo) this.seguirAClaude = false;
+        this.reproducir();
+      }
+    },
+
+    verDesdeInicio() {
+      this.pausar();
+      this.irA(0);
+      this.reproducir();
     },
 
     seleccionar(ruta: string | null) {
@@ -181,7 +311,7 @@ export const useEstudio = defineStore('estudio', {
       this.informar();
     },
 
-    /** Agrega algo que el usuario tocó al próximo mensaje (sin repetir). */
+    /** Agrega algo que el usuario señaló al próximo mensaje (sin repetir). */
     referir(r: Referencia) {
       const clave = (x: Referencia) => `${x.tipo}:${x.id ?? ''}`;
       const i = this.referencias.findIndex((x) => clave(x) === clave(r));
@@ -189,6 +319,13 @@ export const useEstudio = defineStore('estudio', {
       else this.referencias.push(r);
       this.lateral = 'chat';
       this.informar();
+    },
+
+    /** Señala una pieza: la selecciona y la agrega al mensaje con su nombre y su escena. */
+    senalarPieza(ruta: string, punto?: [number, number]) {
+      this.seleccionar(ruta);
+      const escena = this.escenaActual?.escena.id;
+      this.referir({ tipo: 'pieza', id: ruta, nombre: this.nombre(ruta), escena, t: Math.round(this.tiempo * 100) / 100, ...(punto ? { punto } : {}) });
     },
 
     quitarReferencia(i: number) {
@@ -211,17 +348,63 @@ export const useEstudio = defineStore('estudio', {
       await api().enviar(texto, refs);
     },
 
+    async volverA(version: number, preguntar = true): Promise<boolean> {
+      if (this.respondiendo) { this.avisar(t('aviso.esperaClaude')); return false; }
+      if (preguntar) {
+        const si = await this.confirmar({ titulo: t('dlg.volverTitulo', { n: version }), texto: t('dlg.volverTexto'), aceptar: t('dlg.volver') });
+        if (!si) return false;
+      }
+      const r = await api().volverA(version);
+      if (r.ok) this.avisar(t('aviso.volvi', { n: version }), 'ok');
+      else this.avisar((r.errores ?? [r.mensaje]).join('\n'), 'error');
+      return r.ok;
+    },
+
+    /** Ctrl+Z: regresa a la versión anterior (y deja la actual para Ctrl+Shift+Z). */
+    async deshacer() {
+      if (this.respondiendo) { this.avisar(t('aviso.esperaClaude')); return; }
+      const versiones = await api().versiones();
+      const actual = versiones[0];
+      const previa = versiones[1];
+      if (!actual || !previa) { this.avisar(t('aviso.nadaQueDeshacer')); return; }
+      const actualNum = this.version;
+      if (await this.volverA(previa.numero, false)) {
+        this.rehacer.push(actualNum);
+        this.avisar(t('aviso.deshice', { texto: actual.resumen.replace(/\s*\(.*?\)\s*/g, ' ').slice(0, 80) }));
+      }
+    },
+
+    async rehacerCambio() {
+      const v = this.rehacer.pop();
+      if (v === undefined) return;
+      if (await this.volverA(v, false)) this.avisar(t('aviso.rehice'));
+    },
+
     async exportar() {
       if (this.exportando) return;
+      if (this.respondiendo) { this.avisar(t('barra.exportarEspera')); return; }
       this.exportando = { hechos: 0, total: 1 };
       try {
         const r = await api().exportar();
-        this.avisar(`Video listo en ${r.segundosRender.toFixed(1)} s`, 'ok', { texto: 'Mostrar en carpeta', hacer: () => void api().mostrarArchivo(r.salida) });
+        const archivo = r.salida.split(/[\\/]/).pop()!;
+        this.avisar(t('aviso.listo'), 'ok', {
+          detalle: t('aviso.listoDetalle', { archivo, segundos: r.segundosRender.toFixed(1) }),
+          acciones: [
+            { texto: t('aviso.reproducir'), hacer: () => void api().abrirArchivo(r.salida) },
+            { texto: t('aviso.mostrar'), hacer: () => void api().mostrarArchivo(r.salida) },
+          ],
+        });
       } catch (e) {
-        this.avisar(`No se pudo exportar: ${(e as Error).message}`, 'error');
+        this.avisar(t('aviso.exportFallo', { error: (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }), 'error');
       } finally {
         this.exportando = null;
       }
     },
+
+    alternarLinea() {
+      this.lineaAbierta = !this.lineaAbierta;
+      try { localStorage.setItem('motionai.linea', this.lineaAbierta ? 'abierta' : 'cerrada'); } catch { /* sin almacenamiento */ }
+    },
   },
 });
+

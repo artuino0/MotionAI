@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { NuevoProyecto, Reciente } from '../../compartido/api.js';
+import { fecha, t } from '../i18n.js';
 import { useEstudio } from '../tiendas/estudio.js';
+import Icono from './Icono.vue';
+import SelectorIdioma from './SelectorIdioma.vue';
 
 const e = useEstudio();
 const recientes = ref<Reciente[]>([]);
 const revisando = ref(false);
 const nuevo = ref<NuevoProyecto>({ nombre: '', formato: '9:16', duracion: 15, fps: 30 });
+const brief = ref('');
 const creando = ref(false);
+const FORMATOS = ['9:16', '4:5', '1:1', '16:9'] as const;
+const DURACIONES = [10, 15, 30, 60];
 
 onMounted(async () => (recientes.value = await window.motionai.recientes()));
+
+const listo = computed(() => !!(e.claude?.instalado && e.claude.sesionIniciada));
+const motivo = computed(() => (!listo.value ? t('inicio.nuevo.faltaClaude') : !nuevo.value.nombre.trim() ? t('inicio.nuevo.faltaNombre') : ''));
 
 async function revisar() {
   revisando.value = true;
@@ -18,10 +27,11 @@ async function revisar() {
 }
 
 async function crear() {
-  if (!nuevo.value.nombre.trim()) return;
+  if (motivo.value) return;
   creando.value = true;
   try {
     await e.abrir(await window.motionai.nuevoProyecto({ ...nuevo.value, nombre: nuevo.value.nombre.trim() }));
+    if (brief.value.trim()) await e.enviar(brief.value.trim());
   } catch (err) {
     e.avisar((err as Error).message, 'error');
   } finally {
@@ -37,64 +47,89 @@ async function abrir(ruta?: string) {
     e.avisar((err as Error).message, 'error');
   }
 }
-
-const listo = () => e.claude?.instalado && e.claude.sesionIniciada;
-const fecha = (iso: string) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
 </script>
 
 <template>
-  <div class="inicio">
+  <div class="inicio desplazable">
     <header>
-      <h1><span class="marca">Motion</span>AI</h1>
-      <p class="tenue">Motion graphics pidiéndoselos a Claude.</p>
+      <div>
+        <h1>MotionAI</h1>
+        <p class="tenue">{{ t('app.lema') }}</p>
+      </div>
+      <SelectorIdioma />
     </header>
 
-    <section class="claude" :class="{ ok: listo() }">
-      <template v-if="!e.claude">Revisando Claude Code…</template>
-      <template v-else-if="listo()">
-        <strong>✓ Claude Code {{ e.claude.version }}</strong>
-        <span class="tenue">listo, con tu sesión iniciada.</span>
-      </template>
-      <template v-else>
-        <strong>Falta conectar Claude Code</strong>
+    <section class="claude" :class="{ ok: listo }" aria-live="polite">
+      <span class="estado"><Icono :nombre="!e.claude ? 'circle' : listo ? 'check' : 'triangle-alert'" :tam="16" /></span>
+      <template v-if="!e.claude"><span>{{ t('inicio.claude.revisando') }}</span></template>
+      <div v-else-if="listo" class="texto">
+        <strong>{{ t('inicio.claude.listo', { version: e.claude.version ?? '' }) }}</strong>
+        <span class="tenue">{{ t('inicio.claude.listoDetalle') }}</span>
+      </div>
+      <div v-else class="texto">
+        <strong>{{ t('inicio.claude.falta') }}</strong>
         <ol><li v-for="p in e.claude.pasos" :key="p">{{ p }}</li></ol>
-        <button :disabled="revisando" @click="revisar">{{ revisando ? 'Revisando…' : 'Revisar de nuevo' }}</button>
-      </template>
+        <button :disabled="revisando" @click="revisar">{{ revisando ? t('inicio.claude.revisandoBoton') : t('inicio.claude.revisar') }}</button>
+      </div>
     </section>
 
     <div class="columnas">
-      <section class="tarjeta">
-        <h2>Nuevo proyecto</h2>
-        <form @submit.prevent="crear">
-          <label>Nombre <input v-model="nuevo.nombre" placeholder="Promo de temporada" autofocus /></label>
-          <label>Formato
-            <select v-model="nuevo.formato">
-              <option value="9:16">Vertical 9:16 · TikTok, Reels, Shorts</option>
-              <option value="4:5">Feed 4:5</option>
-              <option value="1:1">Cuadrado 1:1</option>
-              <option value="16:9">Horizontal 16:9 · YouTube</option>
-            </select>
-          </label>
-          <div class="fila">
-            <label>Duración (s) <input v-model.number="nuevo.duracion" type="number" min="1" max="180" /></label>
-            <label>Cuadros por segundo
-              <select v-model.number="nuevo.fps"><option :value="24">24</option><option :value="25">25</option><option :value="30">30</option><option :value="60">60</option></select>
+      <form class="tarjeta nuevo" @submit.prevent="crear">
+        <h2>{{ t('inicio.nuevo.titulo') }}</h2>
+        <label>{{ t('inicio.nuevo.nombre') }}
+          <input v-model="nuevo.nombre" :placeholder="t('inicio.nuevo.nombreEjemplo')" autofocus />
+        </label>
+        <label>{{ t('inicio.nuevo.brief') }}
+          <textarea v-model="brief" rows="3" :placeholder="t('inicio.nuevo.briefEjemplo')" />
+          <span class="nota">{{ t('inicio.nuevo.briefNota') }}</span>
+        </label>
+        <fieldset>
+          <legend>{{ t('inicio.nuevo.formato') }}</legend>
+          <div class="opciones formatos">
+            <label v-for="f in FORMATOS" :key="f" class="opcion" :class="{ sel: nuevo.formato === f }">
+              <input v-model="nuevo.formato" type="radio" name="formato" :value="f" class="solo-lector" />
+              <span class="forma" :class="'f' + f.replace(':', 'x')" aria-hidden="true" />
+              <span>{{ t(`formato.${f}` as const) }}</span>
             </label>
           </div>
-          <button class="primario" type="submit" :disabled="creando || !nuevo.nombre.trim() || !listo()">
-            {{ creando ? 'Creando…' : 'Crear proyecto' }}
+        </fieldset>
+        <fieldset>
+          <legend>{{ t('inicio.nuevo.duracion') }}</legend>
+          <div class="opciones">
+            <label v-for="d in DURACIONES" :key="d" class="opcion corta" :class="{ sel: nuevo.duracion === d }">
+              <input v-model.number="nuevo.duracion" type="radio" name="duracion" :value="d" class="solo-lector" />
+              {{ t('inicio.nuevo.segundos', { n: d }) }}
+            </label>
+          </div>
+        </fieldset>
+        <details>
+          <summary>{{ t('inicio.nuevo.mas') }}</summary>
+          <label>{{ t('inicio.nuevo.fps') }}
+            <select v-model.number="nuevo.fps"><option :value="24">24</option><option :value="25">25</option><option :value="30">30</option><option :value="60">60</option></select>
+            <span class="nota">{{ t('inicio.nuevo.fpsNota') }}</span>
+          </label>
+        </details>
+        <div class="enviar">
+          <button class="primario grande" type="submit" :disabled="creando || !!motivo" :aria-describedby="motivo ? 'motivo' : undefined">
+            <Icono nombre="sparkles" /> {{ creando ? t('inicio.nuevo.creando') : t('inicio.nuevo.crear') }}
           </button>
-        </form>
-      </section>
+          <span v-if="motivo" id="motivo" class="tenue">{{ motivo }}</span>
+        </div>
+      </form>
 
       <section class="tarjeta">
-        <div class="titulo"><h2>Recientes</h2><button @click="abrir()">Abrir proyecto…</button></div>
-        <p v-if="!recientes.length" class="tenue">Todavía no hay proyectos.</p>
+        <div class="titulo">
+          <h2>{{ t('inicio.recientes.titulo') }}</h2>
+          <button @click="abrir()"><Icono nombre="folder-open" /> {{ t('inicio.recientes.abrir') }}</button>
+        </div>
+        <p v-if="!recientes.length" class="tenue">{{ t('inicio.recientes.vacio') }}</p>
         <ul class="recientes">
-          <li v-for="r in recientes" :key="r.ruta" @click="abrir(r.ruta)">
-            <strong>{{ r.nombre }}</strong>
-            <span class="tenue">{{ fecha(r.abierto) }}</span>
-            <span class="ruta mono">{{ r.ruta }}</span>
+          <li v-for="r in recientes" :key="r.ruta">
+            <button class="reciente" :title="r.ruta" @click="abrir(r.ruta)">
+              <Icono nombre="film" :tam="18" />
+              <span class="nombre">{{ r.nombre }}</span>
+              <span class="tenue">{{ fecha(r.abierto) }}</span>
+            </button>
           </li>
         </ul>
       </section>
@@ -103,23 +138,41 @@ const fecha = (iso: string) => new Date(iso).toLocaleString('es-MX', { dateStyle
 </template>
 
 <style scoped>
-.inicio { height: 100%; overflow: auto; padding: 56px max(32px, calc(50% - 480px)); display: flex; flex-direction: column; gap: 24px; }
-h1 { font-size: 34px; margin: 0; letter-spacing: -0.02em; }
-.marca { color: var(--acento); }
+.inicio { height: 100%; padding: 48px max(32px, calc(50% - 500px)) 40px; display: flex; flex-direction: column; gap: 22px; }
+header { display: flex; justify-content: space-between; align-items: flex-start; }
+h1 { font-size: 32px; margin: 0; letter-spacing: -0.02em; font-weight: 750; }
 header p { margin: 4px 0 0; font-size: 15px; }
-h2 { font-size: 16px; margin: 0 0 14px; }
-.claude { background: var(--panel); border: 1px solid var(--borde); border-left: 3px solid var(--amarillo); border-radius: var(--radio); padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.claude.ok { border-left-color: var(--verde); flex-direction: row; align-items: center; }
-.claude ol { margin: 0; padding-left: 20px; }
-.columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+h2 { font-size: 16px; margin: 0; }
+.claude { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); padding: 14px 16px; }
+.estado { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #edb43e26; color: var(--amarillo); flex: none; }
+.claude.ok .estado { background: #4fcb8d26; color: var(--verde); }
+.texto { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding-top: 3px; }
+.texto ol { margin: 4px 0 6px; padding-left: 20px; line-height: 1.6; }
+.columnas { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; align-items: start; }
 .tarjeta { background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); padding: 20px; min-width: 0; }
-form { display: flex; flex-direction: column; gap: 12px; }
-label { display: flex; flex-direction: column; gap: 5px; color: var(--tenue); }
-.fila { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.titulo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.titulo h2 { margin: 0; }
-.recientes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.recientes li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 12px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
-.recientes li:hover { background: var(--panel-2); border-color: var(--borde); }
-.ruta { grid-column: 1 / -1; font-size: 11px; color: var(--muy-tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nuevo { display: flex; flex-direction: column; gap: 16px; }
+label { display: flex; flex-direction: column; gap: 6px; color: var(--tenue); }
+textarea { resize: vertical; min-height: 64px; }
+.nota { font-size: 12px; color: var(--muy-tenue); }
+fieldset { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+legend { color: var(--tenue); padding: 0; margin-bottom: 6px; }
+.opciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.formatos { display: grid; grid-template-columns: 1fr 1fr; }
+.opcion { flex-direction: row; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--borde); border-radius: var(--radio-chico); cursor: pointer; color: var(--texto); transition: border-color var(--rapido), background var(--rapido); }
+.opcion:hover { border-color: var(--borde-fuerte); }
+.opcion.sel { border-color: var(--acento); background: var(--acento-suave); }
+.opcion:has(input:focus-visible) { outline: 2px solid var(--acento); outline-offset: 2px; }
+.opcion.corta { justify-content: center; min-width: 64px; }
+.forma { border: 2px solid currentColor; border-radius: 3px; flex: none; opacity: 0.8; }
+.f9x16 { width: 12px; height: 20px; } .f4x5 { width: 16px; height: 20px; } .f1x1 { width: 18px; height: 18px; } .f16x9 { width: 24px; height: 14px; }
+details summary { cursor: pointer; color: var(--tenue); width: fit-content; }
+details[open] summary { margin-bottom: 10px; }
+.enviar { display: flex; align-items: center; gap: 12px; }
+.grande { padding: 9px 18px; font-size: 14px; }
+.titulo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.recientes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.reciente { width: 100%; justify-content: flex-start; gap: 12px; background: none; border-color: transparent; padding: 10px 10px; text-align: left; }
+.reciente:hover:not(:disabled) { background: var(--panel-2); border-color: var(--borde); }
+.reciente .nombre { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 980px) { .columnas { grid-template-columns: 1fr; } }
 </style>

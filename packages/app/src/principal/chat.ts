@@ -21,11 +21,19 @@ export function describirReferencias(refs: Referencia[]): string {
   return `\n\nReferencias que tocó el usuario en la app:\n${refs.map(linea).join('\n')}`;
 }
 
-const SISTEMA =
-  'Trabajas dentro de la app de escritorio MotionAI. El proyecto ya está abierto y el usuario lo ve en vivo en el monitor ' +
-  'mientras lo cambias: no crees ni abras otros proyectos. Las referencias al final de un mensaje son piezas, escenas o ' +
-  'momentos que el usuario tocó en la app; úsalas para saber a qué se refiere. Responde breve en español: qué hiciste y qué ' +
-  'podría pedir después. No exportes salvo que te lo pidan.';
+const SISTEMA: Record<'es' | 'en', string> = {
+  es:
+    'Trabajas dentro de la app de escritorio MotionAI. El proyecto ya está abierto y el usuario lo ve en vivo en el monitor ' +
+    'mientras lo cambias: no crees ni abras otros proyectos. Las referencias al final de un mensaje son piezas, escenas o ' +
+    'momentos que el usuario tocó en la app; úsalas para saber a qué se refiere. Responde breve en español: qué hiciste y qué ' +
+    'podría pedir después. Al hablar de piezas usa lo que se ve (su texto, su forma o su nombre), no sus ids. No exportes salvo que te lo pidan.',
+  en:
+    'You are working inside the MotionAI desktop app. The project is already open and the user watches it live in the monitor ' +
+    'while you change it: do not create or open other projects. References at the end of a message are pieces, scenes or ' +
+    'moments the user clicked in the app; use them to know what they mean. The guides and tool results are in Spanish, but ' +
+    'reply briefly in English: what you did and what they could ask next. When talking about pieces, describe what is visible ' +
+    '(their text, shape or name), not their ids. Do not export unless asked.',
+};
 
 interface Guardado {
   sesion?: string;
@@ -64,8 +72,8 @@ export class Chat {
   }
 
   /** Manda un mensaje. `alTurno` recibe cada turno cada vez que cambia; `version` da la versión actual del documento. */
-  async enviar(texto: string, referencias: Referencia[], version: () => number, alTurno: (t: Turno) => void): Promise<void> {
-    if (this.control) throw new Error('Claude todavía está respondiendo el mensaje anterior.');
+  async enviar(texto: string, referencias: Referencia[], version: () => number, alTurno: (t: Turno) => void, idioma: 'es' | 'en' = 'es'): Promise<void> {
+    if (this.control) throw new Error(idioma === 'en' ? 'Claude is still answering the previous message.' : 'Claude todavía está respondiendo el mensaje anterior.');
     const id = () => Math.random().toString(36).slice(2, 10);
     const usuario: Turno = { id: id(), rol: 'usuario', texto, fecha: new Date().toISOString(), ...(referencias.length ? { referencias } : {}) };
     const claude: Turno = { id: id(), rol: 'claude', texto: '', fecha: new Date().toISOString(), herramientas: [], versionAntes: version(), enCurso: true };
@@ -86,7 +94,7 @@ export class Chat {
           break;
         case 'resultado': {
           const h = claude.herramientas!.find((x) => x.id === e.id);
-          if (h) { h.estado = e.error ? 'error' : 'ok'; h.resumen = e.texto.split('\n')[0]!.slice(0, 200); }
+          if (h) { h.estado = e.error ? 'error' : 'ok'; h.resumen = e.texto.split('\n').slice(0, 3).join(' ').slice(0, 300); }
           break;
         }
         case 'fin':
@@ -100,7 +108,7 @@ export class Chat {
     };
     try {
       await lanzarAgente(
-        { ...this.lanzar, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA },
+        { ...this.lanzar, mensaje: texto + describirReferencias(referencias), sesion: this.datos.sesion, senal: this.control.signal, sistema: SISTEMA[idioma] },
         alEvento,
       );
     } catch (e) {

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { dibujarCuadro, type Registro } from '@motionai/motor';
+import { idioma, t } from '../i18n.js';
 import { useEstudio, type Vista } from '../tiendas/estudio.js';
-import { dibujarSeleccion, dibujarVista, piezaEn } from '../util/dibujo.js';
+import { dibujarMarca, dibujarVista, piezaEn } from '../util/dibujo.js';
+import { nombreEscena } from '../util/nombres.js';
+import Icono from './Icono.vue';
 
 const e = useEstudio();
 const lienzo = ref<HTMLCanvasElement>();
@@ -11,15 +14,15 @@ const area = ref<HTMLDivElement>();
 const tam = ref({ w: 0, h: 0 });
 let registros: Registro[] = [];
 
-const tc = (t: number) => {
-  const m = Math.floor(t / 60), s = t - m * 60;
-  return `${String(m).padStart(2, '0')}:${s.toFixed(2).padStart(5, '0')}`;
+const tc = (s: number) => {
+  const m = Math.floor(s / 60), r = s - m * 60;
+  return `${String(m).padStart(2, '0')}:${r.toFixed(2).padStart(5, '0')}`;
 };
 
 function acomodar() {
   const esc = e.escenario;
   if (!esc || !area.value) return;
-  const w = area.value.clientWidth - 32, h = area.value.clientHeight - 32;
+  const w = area.value.clientWidth - 40, h = area.value.clientHeight - 40;
   const k = Math.min(w / esc.ancho, h / esc.alto);
   tam.value = { w: Math.floor(esc.ancho * k), h: Math.floor(esc.alto * k) };
 }
@@ -36,9 +39,16 @@ function dibujar() {
   dibujarCuadro(c.getContext('2d')!, esc, e.tiempo, e.entorno, { registrar: (r) => registros.push(r) });
   const ctx = o.getContext('2d')!;
   ctx.clearRect(0, 0, o.width, o.height);
-  dibujarVista(ctx, esc, e.vista);
+  dibujarVista(ctx, esc, e.vista, {
+    zona: t('monitor.zona'),
+    soloVertical: t('monitor.soloVertical'),
+    cabecera: idioma.value === 'en' ? 'Following     For You' : 'Siguiendo     Para ti',
+  });
+  const k = tam.value.w / esc.ancho || 1;
   const sel = e.seleccion && registros.find((r) => r.ruta === e.seleccion);
-  if (sel) dibujarSeleccion(ctx, sel, tam.value.w / esc.ancho);
+  if (sel) dibujarMarca(ctx, sel, k, e.nombre(sel.ruta), '#2ec4d6', '#06272c');
+  const cambio = e.resaltado && registros.find((r) => r.ruta === e.resaltado);
+  if (cambio && cambio !== sel) dibujarMarca(ctx, cambio, k, `✦ ${e.nombre(cambio.ruta)}`, '#f2b84b', '#2b1c02');
 }
 
 function clic(ev: MouseEvent) {
@@ -49,30 +59,16 @@ function clic(ev: MouseEvent) {
   const y = ((ev.clientY - r.top) / r.height) * esc.alto;
   const p = piezaEn(registros, x, y);
   if (!p) { e.seleccionar(null); return; }
-  e.seleccionar(p.ruta);
-  e.referir({ tipo: 'pieza', id: p.ruta, nombre: p.nodo.nombre, escena: e.escenaActual?.escena.id, t: e.tiempo, punto: [x, y] });
+  e.senalarPieza(p.ruta, [Math.round(x), Math.round(y)]);
 }
 
-function saltarEscena(dir: number) {
-  const esc = e.escenario;
-  if (!esc) return;
-  const inicios = esc.escenas.map((x) => x.inicio);
-  const t = e.tiempo;
-  const destino = dir > 0 ? inicios.find((i) => i > t + 1e-3) ?? esc.duracion : [...inicios].reverse().find((i) => i < t - 0.05) ?? 0;
-  e.pausar();
-  e.irA(destino);
-}
+const vistas: Vista[] = ['limpia', 'tiktok', 'reels', 'facebook'];
+const escena = computed(() => nombreEscena(e.proyecto, e.escenaActual?.escena.id));
 
-const vistas: { id: Vista; nombre: string }[] = [
-  { id: 'limpia', nombre: 'Vista limpia' }, { id: 'tiktok', nombre: 'Como en TikTok' },
-  { id: 'reels', nombre: 'Como en Reels' }, { id: 'facebook', nombre: 'Como en Facebook' },
-];
-const escena = computed(() => e.escenaActual?.escena);
-
-watch(() => [e.escenario, e.tiempo, e.seleccion, e.vista, e.entorno], dibujar);
+watch(() => [e.escenario, e.tiempo, e.seleccion, e.vista, e.entorno, e.resaltado, idioma.value], dibujar);
 let obs: ResizeObserver;
 onMounted(() => {
-  obs = new ResizeObserver(() => { acomodar(); });
+  obs = new ResizeObserver(() => acomodar());
   obs.observe(area.value!);
   dibujar();
 });
@@ -82,24 +78,33 @@ onBeforeUnmount(() => obs.disconnect());
 <template>
   <section class="monitor">
     <div ref="area" class="area">
-      <div v-if="e.errorDocumento && !e.escenario" class="error">{{ e.errorDocumento }}</div>
-      <div class="pantalla" :style="{ width: tam.w + 'px', height: tam.h + 'px' }">
+      <div v-if="e.respondiendo" class="claude" role="status">
+        <span class="punto" aria-hidden="true" />
+        {{ e.trabajandoEn ? t('monitor.claude', { escena: e.trabajandoEn }) : t('monitor.claudeSinEscena') }}
+      </div>
+      <div v-if="e.errorDocumento && !e.escenario" class="error" role="alert">{{ e.errorDocumento }}</div>
+      <div class="pantalla" :class="{ trabajando: e.respondiendo }" :style="{ width: tam.w + 'px', height: tam.h + 'px' }">
         <canvas ref="lienzo" />
-        <canvas ref="capa" class="capa" @click="clic" />
+        <canvas ref="capa" class="capa" role="img" :aria-label="t('monitor.lienzo')" @click="clic" />
       </div>
     </div>
     <div class="controles">
-      <span class="tc mono">{{ tc(e.tiempo) }} <span class="tenue">/ {{ tc(e.duracion) }}</span></span>
-      <span class="tenue escena">{{ escena ? escena.nombre ?? escena.id : '' }}</span>
-      <span class="centro">
-        <button class="icono" title="Escena anterior" @click="saltarEscena(-1)">⏮</button>
-        <button class="icono play" :title="e.reproduciendo ? 'Pausa (espacio)' : 'Reproducir (espacio)'" @click="e.alternar()">{{ e.reproduciendo ? '❚❚' : '▶' }}</button>
-        <button class="icono" title="Escena siguiente" @click="saltarEscena(1)">⏭</button>
+      <span class="tc"><strong>{{ tc(e.tiempo) }}</strong> <span class="tenue">/ {{ tc(e.duracion) }}</span></span>
+      <span class="escena tenue">{{ escena }}</span>
+      <span class="transporte">
+        <button class="fantasma icono" :aria-label="t('monitor.anterior')" :title="t('monitor.anterior')" @click="e.saltarEscena(-1)"><Icono nombre="skip-back" /></button>
+        <button class="icono play" :aria-label="e.reproduciendo ? t('monitor.pausar') : t('monitor.reproducir')" :title="e.reproduciendo ? t('monitor.pausar') : t('monitor.reproducir')" @click="e.alternar()">
+          <Icono :nombre="e.reproduciendo ? 'pause' : 'play'" :tam="18" relleno />
+        </button>
+        <button class="fantasma icono" :aria-label="t('monitor.siguiente')" :title="t('monitor.siguiente')" @click="e.saltarEscena(1)"><Icono nombre="skip-forward" /></button>
       </span>
       <span />
-      <select v-model="e.vista" class="vista">
-        <option v-for="v in vistas" :key="v.id" :value="v.id">{{ v.nombre }}</option>
-      </select>
+      <label class="vista">
+        <span class="solo-lector">{{ t('monitor.vista') }}</span>
+        <select v-model="e.vista">
+          <option v-for="v in vistas" :key="v" :value="v">{{ t(`monitor.vista.${v}` as const) }}</option>
+        </select>
+      </label>
     </div>
   </section>
 </template>
@@ -107,13 +112,20 @@ onBeforeUnmount(() => obs.disconnect());
 <style scoped>
 .monitor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #0f1114; }
 .area { flex: 1; display: grid; place-items: center; min-height: 0; position: relative; }
-.pantalla { position: relative; box-shadow: 0 10px 40px #000a; }
+.pantalla { position: relative; box-shadow: 0 14px 40px -10px #000; border-radius: 2px; transition: box-shadow 300ms ease; }
+.pantalla.trabajando { box-shadow: 0 14px 40px -10px #000, 0 0 0 2px #f2b84b66; }
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .capa { cursor: crosshair; }
-.controles { display: grid; grid-template-columns: auto 1fr auto 1fr auto; align-items: center; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--borde); background: var(--panel); }
-.tc { font-size: 14px; }
+.claude {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+  background: #2a2214; border: 1px solid #f2b84b66; color: #f6cf85; font-weight: 600; font-size: 12.5px; white-space: nowrap;
+}
+.punto { width: 7px; height: 7px; border-radius: 50%; background: var(--claude); animation: latido 1.1s infinite; }
+.controles { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 6px 12px; border-top: 1px solid var(--borde); background: var(--panel); }
+.tc { font-size: 14px; white-space: nowrap; }
 .escena { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.centro { display: flex; gap: 6px; }
-.play { min-width: 46px; font-size: 15px; }
-.error { position: absolute; top: 16px; left: 16px; right: 16px; color: var(--rojo); white-space: pre-wrap; z-index: 2; font-size: 12px; }
+.transporte { display: flex; gap: 4px; align-items: center; }
+.play { min-width: 44px; min-height: 36px; background: var(--panel-3); }
+.error { position: absolute; top: 52px; left: 16px; right: 16px; color: var(--rojo); white-space: pre-wrap; z-index: 2; font-size: 12px; background: #1b1e23ee; padding: 10px; border-radius: var(--radio-chico); }
 </style>

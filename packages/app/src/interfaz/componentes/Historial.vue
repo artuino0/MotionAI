@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import type { Version } from '@motionai/estudio';
+import { fecha, hay, lista, t } from '../i18n.js';
 import { useEstudio } from '../tiendas/estudio.js';
+import { idsEnResumen, nombreNodo } from '../util/nombres.js';
+import Icono from './Icono.vue';
 
 const e = useEstudio();
 const versiones = ref<Version[]>([]);
@@ -9,32 +12,36 @@ const cargar = async () => (versiones.value = await window.motionai.versiones())
 onMounted(cargar);
 watch(() => e.version, cargar);
 
-const origen: Record<string, string> = {
-  abrir_proyecto: 'Abierto', externo: 'Cambio fuera de la app', ajustes_proyecto: 'Ajustes', agregar_pieza: 'Pieza nueva',
-  crear_pieza: 'Componente', cambiar: 'Cambio', quitar_pieza: 'Quitar', escenas: 'Escenas', voz: 'Audio', versiones: 'Volver',
-};
-const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const origen = (h: string) => (hay(`hist.origen.${h}`) ? t(`hist.origen.${h}` as never) : h);
 
-async function volver(v: Version) {
-  if (!confirm(`¿Volver el proyecto a la versión ${v.numero}? El cambio queda en el historial y se puede deshacer.`)) return;
-  const r = await window.motionai.volverA(v.numero);
-  e.avisar(r.ok ? `Volví a la versión ${v.numero}.` : (r.errores ?? []).join('\n'), r.ok ? 'ok' : 'error');
+/** Qué cambió, nombrando las piezas como se ven (sin ids). */
+function descripcion(v: Version): string {
+  const ids = idsEnResumen(v.resumen, e.indice);
+  if (ids.length) {
+    const nombres = ids.slice(0, 3).map((id) => nombreNodo(e.indice.get(id)!, e.proyecto ?? undefined));
+    return lista(ids.length > 3 ? [...nombres, `+${ids.length - 3}`] : nombres);
+  }
+  const n = /versión (\d+)/i.exec(v.resumen)?.[1];
+  if (v.herramienta === 'versiones' && n) return t('barra.version', { n });
+  return '';
 }
 </script>
 
 <template>
   <section class="historial desplazable">
-    <p class="tenue">Cada cambio de Claude o de los ajustes queda como una versión. Volver a una también se guarda: nada se pierde.</p>
+    <p class="tenue nota">{{ t('hist.nota') }}</p>
     <ol>
       <li v-for="v in versiones" :key="v.numero" :class="{ actual: v.numero === e.version }">
         <div class="cab">
-          <span class="num mono">v{{ v.numero }}</span>
-          <span class="chip">{{ origen[v.herramienta] ?? v.herramienta }}</span>
-          <span class="tenue mono">{{ hora(v.fecha) }}</span>
-          <button v-if="v.numero !== e.version" class="icono volver" @click="volver(v)">Volver</button>
-          <span v-else class="tenue">actual</span>
+          <span class="num">v{{ v.numero }}</span>
+          <strong>{{ origen(v.herramienta) }}</strong>
+          <span class="tenue hora">{{ fecha(v.fecha, 'hora') }}</span>
         </div>
-        <div class="texto">{{ v.resumen }}</div>
+        <div v-if="descripcion(v)" class="texto" :title="v.resumen">{{ descripcion(v) }}</div>
+        <div class="acc">
+          <span v-if="v.numero === e.version" class="chip">{{ t('hist.actual') }}</span>
+          <button v-else class="fantasma" :disabled="e.respondiendo" @click="e.volverA(v.numero)"><Icono nombre="history" :tam="13" /> {{ t('hist.volver') }}</button>
+        </div>
       </li>
     </ol>
   </section>
@@ -42,12 +49,14 @@ async function volver(v: Version) {
 
 <style scoped>
 .historial { padding: 14px; }
+.nota { margin: 0 0 12px; line-height: 1.5; }
 ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-li { padding: 8px 10px; border: 1px solid var(--borde); border-radius: 6px; }
-li.actual { border-color: var(--acento); }
-.cab { display: flex; align-items: center; gap: 8px; }
-.num { font-weight: 700; }
-.volver { margin-left: auto; }
-.cab .tenue:last-child { margin-left: auto; }
-.texto { margin-top: 4px; font-size: 12px; color: var(--tenue); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 10px; border: 1px solid var(--borde); border-radius: var(--radio-chico); align-items: center; }
+li.actual { border-color: var(--acento); background: var(--acento-suave); }
+.cab { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.num { font-weight: 700; color: var(--tenue); font-size: 12px; }
+.hora { font-size: 12px; margin-left: auto; }
+.texto { grid-column: 1; font-size: 12.5px; color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc { grid-column: 2; grid-row: 1 / span 2; }
+.acc .fantasma { padding: 4px 8px; font-size: 12.5px; }
 </style>

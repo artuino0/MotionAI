@@ -51,20 +51,22 @@ async function principal() {
 
   const carpeta = path.join(SALIDA, 'proyectos');
   const errores: string[] = [];
+  let paso = 'arranque';
   const app = await _electron.launch({
     executablePath: path.join(APP, 'node_modules/electron/dist/electron'),
-    args: [APP, `--user-data-dir=${path.join(SALIDA, 'datos-app')}`, '--no-sandbox'],
+    // La prueba corre en español: es el idioma de referencia de la interfaz.
+    args: [APP, `--user-data-dir=${path.join(SALIDA, 'datos-app')}`, '--no-sandbox', '--lang=es-MX'],
     env: { ...process.env, MOTIONAI_CARPETA: carpeta } as Record<string, string>,
   });
   const w = await app.firstWindow();
-  w.on('pageerror', (e) => errores.push(e.message));
-  w.on('console', (m) => m.type() === 'error' && errores.push(m.text()));
+  w.on('pageerror', (e) => errores.push(`[${paso}] ${e.message}`));
+  w.on('console', (m) => m.type() === 'error' && errores.push(`[${paso}] ${m.text()}`));
   const checks: [string, boolean, string?][] = [];
-  const check = (nombre: string, ok: boolean, detalle?: string) => { checks.push([nombre, ok, detalle]); console.log(`${ok ? '✓' : '✗'} ${nombre}${detalle ? ` · ${detalle}` : ''}`); };
+  const check = (nombre: string, ok: boolean, detalle?: string) => { paso = `después de: ${nombre}`; checks.push([nombre, ok, detalle]); console.log(`${ok ? '✓' : '✗'} ${nombre}${detalle ? ` · ${detalle}` : ''}`); };
 
   // 1. Inicio: Claude listo y proyecto nuevo.
   await w.locator('.claude.ok, .claude ol').first().waitFor({ timeout: 30_000 });
-  check('Inicio detecta Claude Code con sesión', await w.getByText(/listo, con tu sesión iniciada/).isVisible());
+  check('Inicio detecta Claude Code con sesión', await w.locator('.claude.ok').isVisible());
   await w.screenshot({ path: path.join(SALIDA, '1_inicio.png') });
   await w.getByPlaceholder('Promo de temporada').fill('Café Luna');
   await w.getByRole('button', { name: 'Crear proyecto' }).click();
@@ -75,9 +77,9 @@ async function principal() {
   await w.locator('textarea').fill(BRIEF);
   await w.keyboard.press('Enter');
   const t1 = await esperarRespuesta(w, '2_brief');
-  const version1 = Number((await w.locator('.chip', { hasText: 'versión' }).first().textContent())?.match(/\d+/)?.[0]);
+  const version1 = Number((await w.locator('.barra .version').textContent())?.match(/\d+/)?.[0]);
   check('Claude hizo el video desde el chat', version1 > 3, `versión ${version1} en ${minutos(t1)}`);
-  await w.getByRole('button', { name: /Usó \d+ herramientas/ }).last().click();
+  await w.getByRole('button', { name: /Hizo \d+ paso/ }).last().click();
   await w.screenshot({ path: path.join(SALIDA, '2_video_hecho.png') });
 
   // 3. Señalar una pieza con clic en el monitor y pedir un cambio sobre ella.
@@ -86,8 +88,8 @@ async function principal() {
   // Un segundo antes del final: el cierre ya entró completo.
   const regla = w.locator('.regla');
   const caja = (await regla.boundingBox())!;
-  const pps = (caja.width - 110 - 24) / duracion;
-  await regla.click({ position: { x: 110 + (duracion - 1) * pps, y: 10 } });
+  const pps = (caja.width - 96 - 24) / duracion;
+  await regla.click({ position: { x: 96 + (duracion - 1) * pps, y: 10 } });
   await w.waitForTimeout(500);
   const pantalla = (await w.locator('.capa').boundingBox())!;
   // Busca una pieza haciendo clic de arriba hacia abajo por el centro.
@@ -103,12 +105,12 @@ async function principal() {
   await w.locator('textarea').fill('Haz esta pieza un poco más grande y dale un ciclo suave para que no se quede quieta.');
   await w.keyboard.press('Enter');
   const t2 = await esperarRespuesta(w, '3_cambio');
-  const version2 = Number((await w.locator('.chip', { hasText: 'versión' }).first().textContent())?.match(/\d+/)?.[0]);
+  const version2 = Number((await w.locator('.barra .version').textContent())?.match(/\d+/)?.[0]);
   check('Claude cambió la pieza señalada', version2 > version1, `versión ${version1} → ${version2} en ${minutos(t2)}`);
   await w.screenshot({ path: path.join(SALIDA, '3_cambio_hecho.png') });
 
   // 4. Ajuste de proyecto a mano.
-  await w.getByRole('button', { name: 'Ajustes de proyecto' }).click();
+  await w.locator('.barra button', { hasText: 'Ajustes' }).last().click();
   await w.locator('.dialogo').waitFor();
   await w.screenshot({ path: path.join(SALIDA, '4_ajustes.png') });
   await w.locator('label.casilla', { hasText: 'YouTube Shorts' }).locator('input').check();
@@ -118,19 +120,19 @@ async function principal() {
   check('Ajuste de proyecto guardado a mano', guardado, errAjustes || 'plataformas + YouTube Shorts');
 
   // 5. Historial.
-  await w.getByRole('button', { name: 'Historial' }).click();
+  await w.getByRole('tab', { name: 'Historial' }).click();
   await w.waitForTimeout(500);
   const versiones = await w.locator('.historial li').count();
   check('Historial muestra las versiones', versiones >= version2, `${versiones} versiones`);
   await w.screenshot({ path: path.join(SALIDA, '5_historial.png') });
-  await w.getByRole('button', { name: 'Chat' }).click();
+  await w.getByRole('tab', { name: 'Chat' }).click();
 
   // 6. Vista de TikTok y exportar con el botón.
-  await w.locator('select.vista').selectOption('tiktok');
-  await regla.click({ position: { x: 110 + duracion * 0.55 * pps, y: 10 } });
+  await w.locator('.vista select').selectOption('tiktok');
+  await regla.click({ position: { x: 96 + duracion * 0.55 * pps, y: 10 } });
   await w.waitForTimeout(400);
   await w.screenshot({ path: path.join(SALIDA, '6_vista_tiktok.png') });
-  await w.locator('select.vista').selectOption('limpia');
+  await w.locator('.vista select').selectOption('limpia');
   const t0 = Date.now();
   await w.getByRole('button', { name: 'Exportar MP4' }).click();
   await w.getByText(/Video listo/).waitFor({ timeout: 5 * 60_000 });
@@ -140,7 +142,8 @@ async function principal() {
   const mp4 = existsSync(dirExport) ? (await readdir(dirExport)).find((f) => f.endsWith('.mp4')) : undefined;
   const dur = mp4 ? Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(dirExport, mp4)], { encoding: 'utf8' })) : 0;
   check('MP4 exportado con el botón', Math.abs(dur - 15) < 0.2, mp4 ? `${mp4} · ${dur.toFixed(2)} s · ${minutos(Date.now() - t0)}` : 'no se encontró');
-  check('Sin errores en la interfaz', errores.length === 0, errores.slice(0, 3).join(' | '));
+  check('Sin errores en la interfaz', errores.length === 0, errores.slice(0, 5).join(' | '));
+  if (errores.length) await writeFile(path.join(SALIDA, 'errores.txt'), errores.join('\n\n'));
 
   await app.close();
   const reporte = [

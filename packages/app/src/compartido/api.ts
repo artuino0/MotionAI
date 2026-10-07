@@ -67,6 +67,10 @@ export interface ApiMotionAI {
   volverA(version: number): Promise<Resultado>;
   exportar(op?: { formato?: string }): Promise<{ salida: string; segundosRender: number }>;
   mostrarArchivo(ruta: string): Promise<void>;
+  /** Abre un archivo con la app predeterminada (para reproducir el MP4). */
+  abrirArchivo(ruta: string): Promise<void>;
+  /** Idioma de la interfaz: el principal lo usa en sus diálogos y para pedirle a Claude que responda igual. */
+  idioma(i: 'es' | 'en'): void;
   chat(): Promise<Turno[]>;
   enviar(texto: string, referencias: Referencia[]): Promise<void>;
   cancelar(): Promise<void>;

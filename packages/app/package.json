@@ -16,7 +16,8 @@
     "@motionai/motor": "workspace:*",
     "@motionai/render": "workspace:*",
     "@motionai/visor": "workspace:*",
-    "skia-canvas": "^3.0.0"
+    "skia-canvas": "^3.0.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",

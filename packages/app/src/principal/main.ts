@@ -23,6 +23,7 @@ let ventana: BrowserWindow | undefined;
 let estadoApp: EstadoApp = { tiempo: null, seleccion: [], referencias: [] };
 let chat: Chat | undefined;
 let socket = '';
+let idioma: 'es' | 'en' = 'es';
 
 const enviar = (canal: string, dato: unknown) => ventana?.webContents.send(canal, dato);
 
@@ -85,10 +86,10 @@ function registrarIpc() {
   ipcMain.handle('proyecto:abrir', async (_e, ruta?: string) => {
     if (!ruta) {
       const r = await dialog.showOpenDialog(ventana!, {
-        title: 'Abrir proyecto',
+        title: idioma === 'en' ? 'Open project' : 'Abrir proyecto',
         defaultPath: carpetaProyectos(),
         properties: ['openFile'],
-        filters: [{ name: 'Proyecto MotionAI', extensions: ['json'] }],
+        filters: [{ name: idioma === 'en' ? 'MotionAI project' : 'Proyecto MotionAI', extensions: ['json'] }],
       });
       if (r.canceled || !r.filePaths[0]) return null;
       ruta = r.filePaths[0];
@@ -107,12 +108,17 @@ function registrarIpc() {
   ipcMain.handle('versiones:volver', (_e, n: number) => puerto.volverA(n));
   ipcMain.handle('exportar', (_e, op: { formato?: Formato }) => puerto.exportar(op));
   ipcMain.handle('archivo:mostrar', (_e, ruta: string) => shell.showItemInFolder(ruta));
+  ipcMain.handle('archivo:abrir', async (_e, ruta: string) => {
+    const error = await shell.openPath(ruta);
+    if (error) throw new Error(error);
+  });
+  ipcMain.on('idioma', (_e, i: 'es' | 'en') => (idioma = i === 'en' ? 'en' : 'es'));
   ipcMain.handle('chat', () => chat?.cargar() ?? []);
   ipcMain.handle('chat:enviar', (_e, texto: string, referencias) => {
-    if (!chat) throw new Error('No hay un proyecto abierto.');
+    if (!chat) throw new Error(idioma === 'en' ? 'No project is open.' : 'No hay un proyecto abierto.');
     estadoApp = { ...estadoApp, referencias };
     // No se espera: la respuesta llega por chat:turno.
-    void chat.enviar(texto, referencias, () => puerto.estudio?.version ?? 0, (t: Turno) => enviar('chat:turno', t));
+    void chat.enviar(texto, referencias, () => puerto.estudio?.version ?? 0, (t: Turno) => enviar('chat:turno', t), idioma);
   });
   ipcMain.handle('chat:cancelar', () => chat?.cancelar());
   ipcMain.on('estado-app', (_e, e: EstadoApp) => (estadoApp = e));

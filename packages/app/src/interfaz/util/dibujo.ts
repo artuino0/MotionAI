@@ -26,74 +26,108 @@ export function piezaEn(registros: Registro[], x: number, y: number): Registro |
   return undefined;
 }
 
-export function dibujarSeleccion(ctx: CanvasRenderingContext2D, r: Registro, k: number) {
+/**
+ * Recuadro con etiqueta sobre una pieza. `k` es la escala del lienzo en pantalla, para que el trazo
+ * y la letra midan lo mismo sin importar el tamaño del video.
+ */
+export function dibujarMarca(ctx: CanvasRenderingContext2D, r: Registro, k: number, etiqueta: string, color: string, tinta: string) {
   const [x0, y0, x1, y1] = r.caja;
   ctx.save();
-  ctx.strokeStyle = '#2ec4d6';
-  ctx.lineWidth = 3 / k;
-  ctx.setLineDash([10 / k, 6 / k]);
+  ctx.fillStyle = `${color}1a`;
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 / k;
   ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-  ctx.setLineDash([]);
-  const etiqueta = r.ruta;
-  ctx.font = `600 ${13 / k}px system-ui, sans-serif`;
+  ctx.font = `600 ${12 / k}px system-ui, sans-serif`;
   const w = ctx.measureText(etiqueta).width + 14 / k;
   const h = 22 / k;
   const ey = y0 - h - 4 / k > 0 ? y0 - h - 4 / k : y1 + 4 / k;
-  ctx.fillStyle = '#2ec4d6';
-  ctx.fillRect(x0, ey, w, h);
-  ctx.fillStyle = '#06272c';
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x0, ey, w, h, 4 / k);
+  ctx.fill();
+  ctx.fillStyle = tinta;
   ctx.textBaseline = 'middle';
   ctx.fillText(etiqueta, x0 + 7 / k, ey + h / 2);
   ctx.restore();
 }
 
-/** Simulación de la interfaz de cada app sobre el video, con las zonas que tapa. */
-export function dibujarVista(ctx: CanvasRenderingContext2D, esc: Escenario, vista: Vista) {
+/** Simulación de la interfaz de cada app sobre el video, con las zonas que tapa rayadas. */
+export function dibujarVista(ctx: CanvasRenderingContext2D, esc: Escenario, vista: Vista, textos: { zona: string; soloVertical: string; cabecera: string }) {
   if (vista === 'limpia') return;
   const W = esc.ancho, H = esc.alto;
   ctx.save();
-  for (const z of zonasTapadas(vista, esc.proyecto.ajustes.formato)) {
-    ctx.fillStyle = 'rgba(255, 70, 70, 0.10)';
-    ctx.fillRect(z.x * W, z.y * H, z.ancho * W, z.alto * H);
-  }
   if (esc.proyecto.ajustes.formato !== '9:16') {
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, H - 90, W, 90);
     ctx.fillStyle = '#fff';
     ctx.font = '600 30px system-ui, sans-serif';
-    ctx.fillText('La vista de app solo está para 9:16', 24, H - 35);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(textos.soloVertical, 28, H - 45);
     ctx.restore();
     return;
   }
-  const blanco = 'rgba(255,255,255,0.92)';
-  const sombra = (b = 8) => { ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = b; };
-  sombra();
+  // Zonas tapadas: velo oscuro con rayas, para que se vean sobre cualquier fondo.
+  for (const z of zonasTapadas(vista, esc.proyecto.ajustes.formato)) {
+    const x = z.x * W, y = z.y * H, w = z.ancho * W, h = z.alto * H;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(10, 12, 16, 0.32)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(255, 110, 110, 0.55)';
+    ctx.lineWidth = 6;
+    for (let d = -h; d < w + h; d += 34) {
+      ctx.beginPath();
+      ctx.moveTo(x + d, y);
+      ctx.lineTo(x + d - h, y + h);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255, 110, 110, 0.9)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+  }
+  const blanco = 'rgba(255,255,255,0.95)';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
   ctx.fillStyle = blanco;
   ctx.textBaseline = 'middle';
-  // Encabezado
   ctx.font = '600 38px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  if (vista === 'tiktok') ctx.fillText('Siguiendo     Para ti', W / 2, 90);
-  else ctx.fillText(vista === 'reels' ? 'Reels' : 'Reels de Facebook', vista === 'reels' ? 110 : 200, 90);
-  // Columna de botones
+  if (vista === 'tiktok') ctx.fillText(textos.cabecera, W / 2, 90);
+  else { ctx.textAlign = 'left'; ctx.fillText(vista === 'reels' ? 'Reels' : 'Reels · Facebook', 40, 90); }
   const x = vista === 'tiktok' ? W - 80 : W - 70;
   const ys = vista === 'tiktok' ? [0.47, 0.56, 0.63, 0.7, 0.77] : [0.6, 0.67, 0.74, 0.8];
+  ctx.textAlign = 'center';
+  ctx.font = '600 28px system-ui, sans-serif';
   ys.forEach((fy, i) => {
     ctx.beginPath();
     ctx.arc(x, fy * H, i === 0 && vista === 'tiktok' ? 46 : 34, 0, Math.PI * 2);
     ctx.lineWidth = 6;
     ctx.strokeStyle = blanco;
-    if (i === 0 && vista === 'tiktok') { ctx.fillStyle = 'rgba(200,200,200,0.9)'; ctx.fill(); ctx.stroke(); ctx.fillStyle = blanco; }
-    else ctx.stroke();
-    if (i > 0 || vista !== 'tiktok') ctx.fillText(['', '12.3k', '842', '1.2k', '310'][i] ?? '', x, fy * H + 58);
+    if (i === 0 && vista === 'tiktok') { ctx.fillStyle = 'rgba(210,210,210,0.95)'; ctx.fill(); ctx.stroke(); ctx.fillStyle = blanco; }
+    else { ctx.stroke(); ctx.fillText(['', '12.3k', '842', '1.2k', '310'][vista === 'tiktok' ? i : i + 1] ?? '', x, fy * H + 58); }
   });
-  // Descripción
   ctx.textAlign = 'left';
   const y0 = vista === 'tiktok' ? 0.845 : 0.83;
   ctx.font = '700 36px system-ui, sans-serif';
   ctx.fillText('@tu_cuenta', 36, y0 * H);
   ctx.font = '400 32px system-ui, sans-serif';
-  ctx.fillText('Así se ve la descripción de tu video…', 36, y0 * H + 54);
-  ctx.fillText('♫ sonido original', 36, y0 * H + 104);
+  ctx.fillText('…', 36, y0 * H + 54);
+  ctx.fillText('♫', 36, y0 * H + 104);
+  // Etiqueta de la primera zona, para que se entienda qué significa lo rayado.
+  ctx.shadowBlur = 0;
+  ctx.font = '700 26px system-ui, sans-serif';
+  const etiqueta = textos.zona;
+  const ew = ctx.measureText(etiqueta).width + 28;
+  ctx.fillStyle = 'rgba(255, 110, 110, 0.95)';
+  ctx.beginPath();
+  ctx.roundRect(W - ew - 20, 0.35 * H - 54, ew, 42, 8);
+  ctx.fill();
+  ctx.fillStyle = '#2b0606';
+  ctx.fillText(etiqueta, W - ew - 6, 0.35 * H - 33);
   ctx.restore();
 }

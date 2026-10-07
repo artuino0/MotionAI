@@ -1,6 +1,6 @@
 # La app de escritorio
 
-Electron con la interfaz en Vue 3 y Pinia. La distribución sigue el montaje que ya se usaba en Flow (monitor, línea de tiempo, inspector, vistas de las apps), con el panel de Notas cambiado por el chat.
+Electron con la interfaz en Vue 3 y Pinia, en español y en inglés (selector ES/EN en Inicio y en la barra; Claude responde en el idioma de la interfaz). La distribución sigue el montaje que ya se usaba en Flow (monitor, línea de tiempo, inspector, vistas de las apps), con el panel de Notas cambiado por el chat. El contexto de producto para diseño está en [`packages/app/PRODUCT.md`](../packages/app/PRODUCT.md).
 
 ```bash
 pnpm app          # construye y abre la app
@@ -9,15 +9,21 @@ pnpm fase3        # prueba de cierre: maneja la app con Playwright y Claude real
 
 ## Pantallas
 
-- **Inicio:** revisa que Claude Code esté instalado y con sesión (`claude --version`, `claude auth status`) y, si falta algo, dice qué hacer. Crea proyectos (nombre, formato, duración, fps) y abre recientes o cualquier `proyecto.json`. Los proyectos nuevos van a `Documentos/MotionAI/` (o `MOTIONAI_CARPETA`).
-- **Barra:** nombre, formato, duración, escenas, piezas, versión, Ajustes de proyecto y Exportar MP4 con barra de progreso.
+- **Inicio:** revisa que Claude Code esté instalado y con sesión (`claude --version`, `claude auth status`) y, si falta algo, dice qué hacer. Crea proyectos (nombre, formato, duración y, si quieres, el brief, que se manda a Claude al abrir) y abre recientes o cualquier `proyecto.json`. Los proyectos nuevos van a `Documentos/MotionAI/` (o `MOTIONAI_CARPETA`).
+- **Barra:** nombre, resumen (formato, duración, escenas; abre los ajustes), versión (abre el historial), idioma, ayuda, Ajustes y Exportar MP4 con barra de progreso. Exportar espera a que haya video y a que Claude termine; al terminar queda un aviso con Reproducir y Mostrar en carpeta.
 - **Medios (izquierda):** escenas con miniatura, árbol de piezas por escena, biblioteca de componentes y frases de la voz.
-- **Monitor (centro):** reproducción en vivo con el mismo motor del MP4, audio sincronizado, saltos de escena y vistas «Como en TikTok / Reels / Facebook», que simulan la interfaz de cada app y sombrean lo que tapa. Un clic sobre una pieza la selecciona y la agrega al mensaje.
-- **Chat (derecha):** conversación con Claude en streaming. Muestra qué herramienta está usando, cuántos cambios rechazó el validador, la versión que dejó cada respuesta y un botón para deshacerla. Los chips de lo que tocaste viajan con el mensaje.
+- **Monitor (centro):** reproducción en vivo con el mismo motor del MP4, audio sincronizado, saltos de escena y vistas «Como en TikTok / Reels / Facebook», que simulan la interfaz de cada app y rayan lo que tapa. Un clic sobre una pieza la selecciona y la agrega al mensaje. Mientras Claude trabaja, el monitor lo sigue: va a la escena que cambia, marca la pieza en ámbar y avisa «Claude está cambiando: …» (deja de seguirlo si el usuario mueve el cabezal). El primer video se reproduce solo al terminar.
+- **Chat (derecha):** conversación con Claude en streaming, con ejemplos de brief cuando está vacío. Muestra qué está haciendo Claude en palabras («Agregando una pieza…»), cuántas cosas ajustó para cumplir las reglas, la versión que dejó cada respuesta, «Ver resultado» y Deshacer. Los chips de lo que señalaste viajan con el mensaje, con el nombre de la pieza, su escena y el segundo.
 - **Inspector:** datos de la pieza seleccionada o del proyecto. Solo lectura.
 - **Historial:** todas las versiones con lo que cambió; volver a una también queda como versión.
-- **Línea de tiempo (abajo):** pistas de Texto (frases), Piezas (de cuándo a cuándo se ve cada una), Principal (escenas con miniaturas) y Audio. Arrastrar en la regla mueve el cabezal; un clic en un clip lo agrega al mensaje. No se arrastran ni se recortan clips.
-- **Ajustes de proyecto:** formato, fps, duración, plataformas, subtítulos, audio y exportación. Es el único lugar con campos editables; lo que se guarda pasa por los mismos validadores que los cambios de Claude.
+- **Línea de tiempo (abajo, plegable):** pistas de Voz (frases), Piezas (de cuándo a cuándo se ve cada una, con leyenda de colores), Escenas (con miniatura) y Música. Arrastrar en la regla mueve el cabezal; Ctrl+rueda hace zoom; un clic en una pieza la agrega al mensaje. No se arrastran ni se recortan clips.
+- **Ajustes de proyecto:** formato, fps, duración, plataformas, subtítulos, audio y exportación (calidad Alta, Equilibrada o Archivo chico; lo técnico en «Opciones avanzadas»). Es el único lugar con campos editables; lo que se guarda pasa por los mismos validadores que los cambios de Claude. Avisa antes de descartar cambios sin guardar.
+
+## Atajos
+
+Espacio reproduce o pausa; ←/→ un cuadro (con Shift, un segundo); ↑/↓ escena anterior o siguiente; Inicio/Fin; J/K/L; Ctrl+Z y Ctrl+Shift+Z deshacen y rehacen versiones; Ctrl+E exporta; Ctrl+, abre los ajustes; Esc quita la selección o cierra; ? muestra la hoja de atajos y un glosario.
+
+En la interfaz las piezas se llaman por lo que se ve (su texto, la pieza reusable de la que son copia, o su tipo); los ids solo aparecen en «Detalles técnicos» del inspector.
 
 ## Cómo se conecta con Claude
 

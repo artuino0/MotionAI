@@ -1,3 +1,4 @@
+import './sin-eval.js';
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import App from './componentes/App.vue';
