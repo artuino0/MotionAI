@@ -26,7 +26,7 @@ const icono = { info: 'info', ok: 'check', error: 'triangle-alert' } as const;
 </template>
 
 <style scoped>
-.avisos { position: fixed; left: 16px; bottom: 16px; flex-direction: column-reverse; display: flex; flex-direction: column; gap: 8px; z-index: 60; width: min(380px, calc(100vw - 32px)); }
+.avisos { position: fixed; left: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; width: min(380px, calc(100vw - 32px)); }
 .aviso { display: flex; gap: 10px; align-items: flex-start; background: var(--panel-2); border: 1px solid var(--borde-fuerte); border-radius: var(--radio); padding: 10px 8px 10px 12px; box-shadow: var(--sombra); }
 .marca { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--acento-suave); color: var(--acento); flex: none; }
 .ok .marca { background: #4fcb8d26; color: var(--verde); }
