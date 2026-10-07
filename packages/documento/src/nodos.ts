@@ -96,6 +96,19 @@ export interface NodoBase {
   visible?: boolean;
   sombra?: Sombra;
   animacion?: Animacion;
+  /**
+   * Solo con el estilo de papel recortado: `false` dibuja la pieza limpia (pantallas, gráficas),
+   * o un objeto apaga partes del efecto. `false` en un grupo o instancia vale para todo lo que tiene dentro.
+   */
+  papel?: boolean | Papel;
+}
+
+export interface Papel {
+  sombra?: boolean;
+  filo?: boolean;
+  grano?: boolean;
+  /** Multiplica lo irregular del corte: 0 deja los bordes rectos, 2 los hace el doble de irregulares. */
+  temblor?: number;
 }
 
 export interface Rect extends NodoBase {
@@ -188,6 +201,12 @@ const base = {
   opacidad: z.number().min(0).max(1).optional(),
   visible: z.boolean().optional(),
   sombra: SombraEsquema.optional(),
+  papel: z
+    .union([
+      z.boolean(),
+      z.strictObject({ sombra: z.boolean().optional(), filo: z.boolean().optional(), grano: z.boolean().optional(), temblor: z.number().min(0).max(4).optional() }),
+    ])
+    .optional(),
   animacion: AnimacionEsquema.optional(),
 };
 

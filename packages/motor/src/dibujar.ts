@@ -1,6 +1,7 @@
 import type { Contorno, Degradado, Nodo, Relleno } from '@motionai/documento';
 import { estado, medir, type Estado, type Medio } from './animar.js';
-import { colorCss, leerColor } from './color.js';
+import { colorCss, leerColor, type RGBA } from './color.js';
+import { HERVOR, bordes, granoFondo, opcionesPapel, patronGrano, rellenarPapel, trazarAplanado } from './papel.js';
 import type { EscenaPreparada, Escenario, NodoPreparado } from './preparar.js';
 import { dibujarSubtitulos } from './subtitulos.js';
 import { aplanar, limitesTrazado, trazadoElipse, trazadoRect, trazar, trazarParcial, type Aplanado, type Comando } from './svg.js';
@@ -13,6 +14,8 @@ type Caja = [x0: number, y0: number, x1: number, y1: number];
 export interface Entorno {
   /** Imagen ya cargada de `recursos/`, o nada si no está. */
   imagen(archivo: string): CanvasImageSource | null | undefined;
+  /** Lienzo auxiliar (para texturas como el grano del papel). Sin él, el papel se dibuja sin grano. */
+  lienzo?(ancho: number, alto: number): { getContext(t: '2d'): CanvasRenderingContext2D | null; width: number; height: number };
 }
 
 /** Dónde quedó una pieza en un cuadro. Sirve para validar reglas y para seleccionar con clic. */
@@ -38,6 +41,19 @@ interface Rastro {
   registrar?: (r: Registro) => void;
   prefijo: string;
   reposo: boolean;
+  /** Estilo de papel recortado: número de hervor y textura de grano. */
+  papel?: { hervor: number; grano: CanvasPattern | null };
+}
+
+/**
+ * Tiempo con que se anima el cuadro. En papel recortado la animación avanza a `fpsEstilo` (stop motion);
+ * el número de hervor dice cuándo cambia el corte de los bordes.
+ */
+export function tiempoEstilo(esc: Escenario, t: number): { t: number; hervor: number } {
+  if (esc.proyecto.ajustes.estilo !== 'papel') return { t, hervor: 0 };
+  const fps = esc.proyecto.ajustes.fpsEstilo;
+  const cuadro = Math.floor(t * fps + 1e-6);
+  return { t: Math.min(t, cuadro / fps), hervor: Math.floor(cuadro / HERVOR) };
 }
 
 /** Escena que se ve en el segundo `t`. */
@@ -64,13 +80,17 @@ export function dibujarCuadro(ctx: Ctx, esc: Escenario, t: number, entorno: Ento
   const escena = escenaEn(esc, t);
   ctx.fillStyle = estiloRelleno(ctx, escena?.escena.fondo ?? esc.proyecto.ajustes.fondo);
   ctx.fillRect(0, 0, lienzo.ancho, lienzo.alto);
+  const papel = esc.proyecto.ajustes.estilo === 'papel';
+  const grano = papel ? patronGrano(ctx, entorno.lienzo?.bind(entorno)) : null;
+  if (papel) granoFondo(ctx, grano, lienzo.ancho, lienzo.alto);
 
   if (escena) {
     const m: Medio = { contenedor: lienzo, lienzo };
-    const r: Rastro = { registrar: op.registrar, prefijo: '', reposo: true };
-    for (const np of escena.hijos) dibujarNodo(ctx, np, t, m, entorno, r);
+    const te = tiempoEstilo(esc, t);
+    const r: Rastro = { registrar: op.registrar, prefijo: '', reposo: true, ...(papel ? { papel: { hervor: te.hervor, grano } } : {}) };
+    for (const np of escena.hijos) dibujarNodo(ctx, np, te.t, m, entorno, r);
   }
-  if (op.subtitulos !== false) dibujarSubtitulos(ctx, esc, t);
+  if (op.subtitulos !== false) dibujarSubtitulos(ctx, esc, t, papel ? { hervor: tiempoEstilo(esc, t).hervor, grano } : undefined);
   ctx.restore();
 }
 
@@ -109,17 +129,17 @@ function dibujarNodo(ctx: Ctx, np: NodoPreparado, t: number, m: Medio, entorno: 
     case 'rect': {
       const w = medir(n.ancho, m.contenedor.ancho), h = medir(n.alto, m.contenedor.alto);
       const cmds = memo(np, `rect:${w}:${h}:${n.radio ?? 0}`, () => trazadoRect(w, h, n.radio ?? 0));
-      dibujarForma(ctx, np, cmds, n, s);
+      dibujarForma(ctx, np, cmds, n, s, ruta, r.papel);
       break;
     }
     case 'elipse': {
       const w = medir(n.ancho, m.contenedor.ancho), h = medir(n.alto, m.contenedor.alto);
       const cmds = memo(np, `elipse:${w}:${h}`, () => trazadoElipse(w, h));
-      dibujarForma(ctx, np, cmds, n, s);
+      dibujarForma(ctx, np, cmds, n, s, ruta, r.papel);
       break;
     }
     case 'trazo':
-      dibujarForma(ctx, np, np.trazado!, n, s);
+      dibujarForma(ctx, np, np.trazado!, n, s, ruta, r.papel);
       break;
     case 'texto':
       dibujarTexto(ctx, np, n, s);
@@ -137,11 +157,12 @@ function dibujarNodo(ctx: Ctx, np: NodoPreparado, t: number, m: Medio, entorno: 
         ctx.clip();
       }
       const mh: Medio = { contenedor: cont, lienzo: m.lienzo };
-      for (const h of np.hijos) dibujarNodo(ctx, h, t, mh, entorno, { ...r, reposo });
+      const papel = n.papel === false ? undefined : r.papel;
+      for (const h of np.hijos) dibujarNodo(ctx, h, t, mh, entorno, { ...r, reposo, papel });
       break;
     }
     case 'instancia':
-      for (const h of np.hijos) dibujarNodo(ctx, h, t, m, entorno, { ...r, reposo, prefijo: `${ruta}/` });
+      for (const h of np.hijos) dibujarNodo(ctx, h, t, m, entorno, { ...r, reposo, prefijo: `${ruta}/`, papel: n.papel === false ? undefined : r.papel });
       break;
   }
   ctx.restore();
@@ -210,7 +231,14 @@ function dibujarForma(
   cmds: readonly Comando[],
   n: Extract<Nodo, { tipo: 'rect' | 'elipse' | 'trazo' }>,
   s: Estado,
+  ruta = n.id,
+  papel?: Rastro['papel'],
 ): void {
+  const opciones = papel ? opcionesPapel(n) : null;
+  if (papel && opciones) {
+    dibujarFormaPapel(ctx, np, cmds, n, s, ruta, papel, opciones);
+    return;
+  }
   const relleno = s.relleno ? colorCss(s.relleno) : n.relleno !== undefined ? estiloRelleno(ctx, n.relleno) : undefined;
   if (relleno !== undefined) {
     // Mientras se dibuja el contorno, el relleno aparece al final.
@@ -230,6 +258,47 @@ function dibujarForma(
     prepararContorno(ctx, n.contorno, s.contorno ? colorCss(s.contorno) : undefined);
     if (s.trazo >= 1) trazar(ctx, cmds);
     else trazarParcial(ctx, memo<Aplanado>(np, `aplanado:${cmds.length}`, () => np.aplanado ?? aplanar(cmds)), s.trazo);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** Trazados aplanados de rectángulos y elipses (los comandos ya se guardan por tamaño en `memo`). */
+const aplanados = new WeakMap<readonly Comando[], Aplanado>();
+
+function dibujarFormaPapel(
+  ctx: Ctx,
+  np: NodoPreparado,
+  cmds: readonly Comando[],
+  n: Extract<Nodo, { tipo: 'rect' | 'elipse' | 'trazo' }>,
+  s: Estado,
+  ruta: string,
+  papel: NonNullable<Rastro['papel']>,
+  opciones: NonNullable<ReturnType<typeof opcionesPapel>>,
+): void {
+  let aplanado = np.nodo.tipo === 'trazo' ? np.aplanado : aplanados.get(cmds);
+  if (!aplanado) { aplanado = aplanar(cmds); aplanados.set(cmds, aplanado); }
+  const cortado = bordes({ ruta, hervor: papel.hervor, opciones, aplanado });
+  const relleno: RGBA | CanvasGradient | undefined =
+    s.relleno ?? (n.relleno === undefined ? undefined : typeof n.relleno === 'string' ? leerColor(n.relleno) : degradado(ctx, n.relleno));
+  if (relleno !== undefined) {
+    const f = s.trazo >= 1 ? 1 : Math.max(0, (s.trazo - 0.7) / 0.3);
+    if (f > 0) {
+      const alfa = ctx.globalAlpha;
+      ctx.globalAlpha = alfa * f;
+      rellenarPapel(ctx, {
+        ruta, hervor: papel.hervor, opciones, aplanado, relleno, grano: papel.grano, conSombraPropia: !!n.sombra,
+        regla: n.tipo === 'trazo' ? (n.reglaRelleno ?? 'nonzero') : 'nonzero',
+      }, cortado);
+      ctx.globalAlpha = alfa;
+    }
+  }
+  if (n.contorno && n.contorno.ancho > 0 && s.trazo > 0) {
+    ctx.save();
+    if (relleno !== undefined) ctx.shadowColor = 'rgba(0,0,0,0)';
+    prepararContorno(ctx, n.contorno, s.contorno ? colorCss(s.contorno) : undefined);
+    if (s.trazo >= 1) trazarAplanado(ctx, cortado);
+    else trazarParcial(ctx, cortado, s.trazo);
     ctx.stroke();
     ctx.restore();
   }

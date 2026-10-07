@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { FontLibrary, loadImage, type Image } from 'skia-canvas';
+import { Canvas, FontLibrary, loadImage, type Image } from 'skia-canvas';
 import { leerProyecto, recursosDe, type Proyecto } from '@motionai/documento';
 import type { Entorno } from '@motionai/motor';
 
@@ -63,7 +63,10 @@ export async function cargarRecursos({ proyecto, base }: ProyectoCargado): Promi
   for (const a of audio) existe(a);
 
   return {
-    entorno: { imagen: (archivo) => cargadas.get(archivo) as unknown as CanvasImageSource | undefined },
+    entorno: {
+      imagen: (archivo) => cargadas.get(archivo) as unknown as CanvasImageSource | undefined,
+      lienzo: (ancho, alto) => new Canvas(ancho, alto) as unknown as ReturnType<NonNullable<Entorno['lienzo']>>,
+    },
     faltantes,
   };
 }

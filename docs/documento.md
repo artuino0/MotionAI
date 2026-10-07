@@ -26,12 +26,21 @@ Todos tienen valor por defecto; solo se escriben los que cambian.
 | `fpsEstilo` | `12` | Cuadros por segundo de la animación propia de un estilo (el hervor del papel); el estilo plano no la usa |
 | `duracion` | fin de la última escena | Segundos |
 | `plataformas` | `["tiktok", "reels"]` | Qué zonas tapadas se revisan: `tiktok`, `reels`, `facebook`, `shorts` |
-| `estilo` | `plano` | Cómo se dibuja todo; por ahora solo `plano` |
+| `estilo` | `plano` | Cómo se dibuja todo: `plano` (vector limpio) o `papel` (papel recortado, ver abajo) |
 | `fondo` | `#FFFFFF` | Color cuando una escena no trae fondo |
 | `kit` | `null` | Kit de marca, o ninguno |
-| `subtitulos` | activados, 3 renglones, posición 0.7, tamaño 64, peso 800, blanco con contorno oscuro | `posicion` es el centro del bloque como fracción del alto; `tamano` es para un lienzo de 1080 de lado corto y se ajusta al formato |
+| `subtitulos` | activados, 3 renglones, posición 0.7, tamaño 64, peso 800, blanco con contorno oscuro | `posicion` es el centro del bloque como fracción del alto; `tamano` es para un lienzo de 1080 de lado corto y se ajusta al formato; `fondo` `{ color, margen, radio }` pone una tarjeta detrás del texto (con papel, de papel) en lugar del contorno |
 | `audio` | sin audio, fundido final de 0.5 s | `voz` y `musica`: `{ archivo, volumen, inicio }` |
 | `exportar` | H.264, calidad 18, carpeta `exportados` | `codec` (`h264` o `h265`), `calidad` (CRF: menos es mejor), `carpeta`, `nombreArchivo` |
+
+## Estilo papel recortado
+
+Un estilo no cambia el documento, solo cómo se dibuja. Con `"estilo": "papel"`:
+
+- Cada figura rellena (`rect`, `elipse`, `trazo`) es un recorte: bordes irregulares que «hierven» (cambian cada 3 cuadros del estilo), un filo blanco de papel rasgado debajo, sombra suave en tres capas, un tono un poco distinto por pieza y grano de papel encima. El fondo de la escena también lleva grano.
+- La animación avanza a `fpsEstilo` cuadros por segundo (12 por defecto), como stop motion; el MP4 sigue a los fps del proyecto.
+- Los textos, las imágenes y los colores transparentes (menos de 50 % de opacidad: vidrio, brillos) quedan limpios.
+- Todo sale de un azar con semilla (el id de la pieza y el número de hervor): el previo y el MP4 son iguales.
 
 ## Tiempo
 
@@ -60,6 +69,7 @@ Todas las piezas tienen `id` (único en el proyecto) y estas propiedades opciona
 | `visible` | `false` para esconderla |
 | `sombra` | `{ color, desenfoque, x, y }` |
 | `animacion` | Ver abajo |
+| `papel` | Solo con el estilo `papel`: `false` dibuja la pieza limpia (en un grupo o instancia, todo lo que tiene dentro), o `{ sombra, filo, grano, temblor }` para apagar partes; `temblor` multiplica lo irregular del corte (0 a 4) |
 
 Usar porcentajes y anclas hace que la composición se acomode al cambiar de formato.
 

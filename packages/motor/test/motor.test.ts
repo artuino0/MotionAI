@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { leerProyecto, type Nodo } from '@motionai/documento';
+import { cortar, azar, pixelesGrano, tono } from '../src/papel.js';
+import { tiempoEstilo } from '../src/dibujar.js';
 import { aplanar, estado, leerColor, leerTrazado, limitesTrazado, preparar, suavizar, escenaEn, totalCuadros } from '../src/index.js';
 
 describe('curvas', () => {
@@ -131,3 +133,47 @@ describe('escenario', () => {
     expect(leerColor('#0F0')).toEqual([0, 255, 0, 1]);
   });
 });
+
+describe('papel recortado', () => {
+  const cuadrado = aplanar(leerTrazado('M0 0 H100 V100 H0 Z'));
+
+  it('corta los bordes sin pasarse de la amplitud y con la misma semilla sale igual', () => {
+    const a = cortar(cuadrado, 2.2, 46, azar(7)), b = cortar(cuadrado, 2.2, 46, azar(7)), c = cortar(cuadrado, 2.2, 46, azar(8));
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
+    const [x0, y0, x1, y1] = limitesTrazado(a);
+    expect(x0).toBeGreaterThanOrEqual(-2.2); expect(y0).toBeGreaterThanOrEqual(-2.2);
+    expect(x1).toBeLessThanOrEqual(102.2); expect(y1).toBeLessThanOrEqual(102.2);
+    // Lados de 100 px en tramos de ~46: 2 puntos por lado, más el cierre.
+    expect(a.subtrazos[0]!.puntos.length / 2).toBe(9);
+    expect(a.subtrazos[0]!.cerrado).toBe(true);
+  });
+
+  it('el tono cambia poco y es fijo por pieza', () => {
+    const t = tono([200, 100, 50, 1], 'pieza');
+    expect(t).toEqual(tono([200, 100, 50, 1], 'pieza'));
+    expect(t[0] / 200).toBeGreaterThan(0.95);
+    expect(t[0] / 200).toBeLessThan(1.05);
+  });
+
+  it('el grano es gris, neutro en promedio y siempre el mismo', () => {
+    const g = pixelesGrano(64);
+    expect(g).toEqual(pixelesGrano(64));
+    let suma = 0;
+    for (let i = 0; i < g.length; i += 4) { expect(g[i]).toBe(g[i + 1]); suma += g[i]!; }
+    expect(suma / (g.length / 4)).toBeGreaterThan(120);
+    expect(suma / (g.length / 4)).toBeLessThan(136);
+  });
+
+  it('anima a fpsEstilo y hierve cada 3 cuadros del estilo', () => {
+    const p = (estilo: 'plano' | 'papel') => preparar(leerProyecto({
+      formato: 'motionai', version: 1, nombre: 'x', ajustes: { estilo, fpsEstilo: 12 }, fuentes: [], frases: [], biblioteca: [],
+      escenas: [{ id: 'e', inicio: 0, fin: 2, hijos: [] }],
+    }));
+    expect(tiempoEstilo(p('plano'), 0.13)).toEqual({ t: 0.13, hervor: 0 });
+    expect(tiempoEstilo(p('papel'), 0.13).t).toBeCloseTo(1 / 12, 6);
+    expect(tiempoEstilo(p('papel'), 0.24).hervor).toBe(0);
+    expect(tiempoEstilo(p('papel'), 0.26).hervor).toBe(1);
+  });
+});
+

@@ -15,7 +15,7 @@ export const FORMATO_IDS = [...(Object.keys(FORMATOS) as FormatoPreset[]), 'libr
 export const FPS = [24, 25, 30, 60] as const;
 export const PLATAFORMAS = ['tiktok', 'reels', 'facebook', 'shorts'] as const;
 export type Plataforma = (typeof PLATAFORMAS)[number];
-export const ESTILOS = ['plano'] as const;
+export const ESTILOS = ['plano', 'papel'] as const;
 
 const SubtitulosEsquema = z.object({
   activados: z.boolean().default(true),
@@ -30,6 +30,15 @@ const SubtitulosEsquema = z.object({
   contorno: z
     .object({ color: ColorEsquema, ancho: z.number().nonnegative() })
     .default({ color: '#1E1E1E', ancho: 10 }),
+  /** Tarjeta detrás del texto (con papel recortado, sale de papel). Sin ella, solo texto con contorno. */
+  fondo: z
+    .object({
+      color: ColorEsquema,
+      /** Espacio entre el texto y el borde de la tarjeta, en píxeles de un lienzo de 1080. */
+      margen: z.number().nonnegative().default(28),
+      radio: z.number().nonnegative().default(14),
+    })
+    .optional(),
 });
 
 const PistaAudioEsquema = z.object({

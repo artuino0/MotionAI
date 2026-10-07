@@ -163,7 +163,8 @@ export function registrarHerramientas(server: McpServer, p: PuertoEstudio): void
       title: 'Ajustes de proyecto',
       description:
         'Cambia ajustes del proyecto; solo manda lo que cambia (se mezcla con lo que hay, null borra). Claves: formato, ancho, alto, fps, ' +
-        'duracion, plataformas, fondo, subtitulos {activados, maxRenglones, posicion, tamano, fuente, peso, color, contorno}, ' +
+        'duracion, plataformas, fondo, estilo ("plano" o "papel": papel recortado), fpsEstilo, ' +
+        'subtitulos {activados, maxRenglones, posicion, tamano, fuente, peso, color, contorno, fondo {color, margen, radio}}, ' +
         'audio {voz, musica, fundidoFinal}, exportar {codec, calidad, carpeta, nombreArchivo}.',
       inputSchema: {
         cambios: z.looseObject({

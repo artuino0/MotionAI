@@ -31,6 +31,27 @@ describe('render en Node', () => {
     expect(compararCuadros(a, b, 1080, 1920).psnr).toBe(Infinity);
   });
 
+  it('papel recortado: igual en cada pasada, hierve con el tiempo y respeta papel: false', async () => {
+    const proyecto = (papel?: boolean) => leerProyecto({
+      formato: 'motionai', version: 1, nombre: 'Papel',
+      ajustes: { formato: '1:1', estilo: 'papel', fondo: '#F6CFCB' }, fuentes: [], frases: [], biblioteca: [],
+      escenas: [{ id: 'e', inicio: 0, fin: 2, hijos: [
+        { id: 'tarjeta', tipo: 'rect', x: 300, y: 300, ancho: 480, alto: 480, relleno: '#006E84', ...(papel === false ? { papel: false } : {}) },
+      ] }],
+    });
+    const { entorno } = await cargarRecursos({ proyecto: proyecto(), base: os.tmpdir() });
+    const esc = preparar(proyecto());
+    const a = pixelesCuadro(esc, 0.1, entorno), b = pixelesCuadro(esc, 0.1, entorno);
+    expect(compararCuadros(a, b, 1080, 1080).psnr).toBe(Infinity);
+    // En el mismo hervor (0.1 s y 0.2 s son el cuadro 1 y 2 del estilo) no cambia; en el siguiente, sí.
+    expect(compararCuadros(a, pixelesCuadro(esc, 0.2, entorno), 1080, 1080).psnr).toBe(Infinity);
+    expect(compararCuadros(a, pixelesCuadro(esc, 0.3, entorno), 1080, 1080).psnr).toBeLessThan(60);
+    // El centro de la tarjeta es su color con grano; con papel: false, el color exacto.
+    const centro = (px: Buffer) => [...px.subarray((540 * 1080 + 540) * 4, (540 * 1080 + 540) * 4 + 3)];
+    expect(centro(pixelesCuadro(preparar(proyecto(false)), 0.1, entorno))).toEqual([0x00, 0x6e, 0x84]);
+    expect(centro(a)).not.toEqual([0x00, 0x6e, 0x84]);
+  });
+
   it('exporta un MP4 con voz y música, con la duración pedida', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'motionai-'));
     execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', path.join(dir, 'voz.wav')]);

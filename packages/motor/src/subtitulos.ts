@@ -1,4 +1,6 @@
 import { colorCss, leerColor } from './color.js';
+import { bordes, opcionesPapel, rellenarPapel } from './papel.js';
+import { aplanar, trazadoRect, trazar } from './svg.js';
 import type { Escenario } from './preparar.js';
 import { bajadaDesdeCentro, fuenteCss, renglones } from './texto.js';
 
@@ -43,22 +45,23 @@ export function maquetarSubtitulo(ctx: Ctx, esc: Escenario, texto: string): Maqu
     tamano *= 0.94;
   }
   lineas = lineas.slice(0, a.maxRenglones);
-  const ancho = Math.max(...lineas.map((l) => ctx.measureText(l).width)) + a.contorno.ancho * k;
+  const borde = a.fondo ? 2 * a.fondo.margen * k : a.contorno.ancho * k;
+  const ancho = Math.max(...lineas.map((l) => ctx.measureText(l).width)) + borde;
   ctx.restore();
   const lh = tamano * 1.15;
-  const alto = lineas.length * lh;
+  const alto = lineas.length * lh + (a.fondo ? 2 * a.fondo.margen * k * 0.75 : 0);
   const yc = esc.alto * a.posicion;
   return {
     lineas,
     fuente,
     lh,
-    y0: yc - alto / 2 + lh / 2,
+    y0: yc - (lineas.length * lh) / 2 + lh / 2,
     caja: [esc.ancho / 2 - ancho / 2, yc - alto / 2, esc.ancho / 2 + ancho / 2, yc + alto / 2],
   };
 }
 
-/** Subtítulos de la voz. */
-export function dibujarSubtitulos(ctx: Ctx, esc: Escenario, t: number): void {
+/** Subtítulos de la voz. Con papel, la tarjeta de fondo se dibuja como un recorte. */
+export function dibujarSubtitulos(ctx: Ctx, esc: Escenario, t: number, papel?: { hervor: number; grano: CanvasPattern | null }): void {
   const frase = fraseEn(esc, t);
   if (!frase) return;
   const a = esc.proyecto.ajustes.subtitulos;
@@ -66,11 +69,34 @@ export function dibujarSubtitulos(ctx: Ctx, esc: Escenario, t: number): void {
   const m = maquetarSubtitulo(ctx, esc, frase.texto);
   const x = esc.ancho / 2;
   ctx.save();
+  if (a.fondo) {
+    const [x0, y0, x1, y1] = m.caja;
+    const cmds = trazadoRect(x1 - x0, y1 - y0, a.fondo.radio * k);
+    ctx.save();
+    ctx.translate(x0, y0);
+    const color = leerColor(a.fondo.color);
+    if (papel) {
+      const opciones = opcionesPapel({ id: 'subtitulo', tipo: 'rect', ancho: 0, alto: 0 })!;
+      // Cada frase es otro recorte: la semilla cambia con el texto.
+      const ruta = `subtitulo:${frase.inicio}`;
+      const aplanado = aplanar(cmds);
+      rellenarPapel(ctx, { ruta, hervor: papel.hervor, opciones, aplanado, relleno: color, grano: papel.grano, conSombraPropia: false },
+        bordes({ ruta, hervor: papel.hervor, opciones, aplanado }));
+    } else {
+      ctx.shadowColor = 'rgba(0,0,0,0.18)';
+      ctx.shadowBlur = 12 * k;
+      ctx.shadowOffsetY = 4 * k;
+      trazar(ctx, cmds);
+      ctx.fillStyle = colorCss(color);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
   ctx.font = m.fuente;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   const bajada = bajadaDesdeCentro(ctx);
-  if (a.contorno.ancho > 0) {
+  if (a.contorno.ancho > 0 && !a.fondo) {
     ctx.lineWidth = a.contorno.ancho * k;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = colorCss(leerColor(a.contorno.color));

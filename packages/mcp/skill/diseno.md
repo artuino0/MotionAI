@@ -40,3 +40,16 @@
 - **Destello:** `trazo` de estrella de cuatro puntas `"M 0 -40 L 10 -10 L 40 0 L 10 10 L 0 40 L -10 10 L -40 0 L -10 -10 Z"` con ciclo `gira`.
 - **Etiqueta o letrero:** `grupo` con `rect` de `radio` igual a la mitad del alto y un `texto` centrado; un poco de `rotacion` (-3 a 3) le da vida.
 - **Persona simple:** cabeza (`elipse`), cuerpo (`rect` con radio grande) y una sonrisa (`trazo` con `contorno`), agrupados; un `mece` leve los hace sentir vivos.
+
+## Estilo papel recortado
+
+Si el usuario pide un look hecho a mano, de papel, collage o stop motion, pon `estilo: "papel"` con `ajustes_proyecto`. El motor hace el resto (bordes rasgados que se mueven, filo blanco, sombra, grano, movimiento a 12 cuadros); tú diseñas igual que en plano, con estas diferencias:
+
+- **Cada figura es un pedazo de papel** con su sombra. No hagas formas tapando con el color del fondo (una luna con un círculo encima): se nota el recorte. Dibuja la silueta con un `trazo`.
+- **Piezas por capas:** un personaje o un objeto se arma con pocas figuras grandes encimadas (cara, pelo, ropa), no con muchas chiquitas.
+- **Colores sólidos y apagados** (pasteles, crema, coral, verde menta, azul petróleo). Los degradados y transparencias rompen la ilusión; la transparencia se dibuja limpia, sin papel.
+- **Fondos de pared:** un `fondo` de escena claro y rayas (`rect` altos) o puntos de otro tono, con `papel: { sombra: false }`.
+- **Pantallas y gráficas** que deben verse nítidas: `papel: false` en su grupo.
+- **Subtítulos:** tarjeta de papel crema con texto oscuro, `subtitulos: { color: "#3A2E30", fondo: { color: "#FFFBF3" } }`.
+- **Movimiento:** como va a 12 cuadros, prefiere entradas `pop`, `cae` y `sube` de 0.35 a 0.5 s y ciclos lentos; los movimientos muy cortos se pierden.
+

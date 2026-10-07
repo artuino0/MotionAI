@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { Proyecto } from '@motionai/documento';
-import { totalCuadros, type Entorno, type Escenario } from '@motionai/motor';
+import { escenaEn, fraseEn, tiempoEstilo, totalCuadros, type Entorno, type Escenario } from '@motionai/motor';
 import { crearLienzo, pixelesCuadro } from './cuadro.js';
 
 export interface OpcionesExportar {
@@ -90,10 +90,16 @@ export async function exportarMP4(
   });
 
   const lienzo = crearLienzo(esc);
+  // Con un estilo que anima a menos cuadros (papel a 12 fps), los cuadros seguidos con el mismo tiempo de
+  // estilo, la misma escena y el mismo subtítulo son idénticos: se dibujan una vez.
+  const escalonado = esc.proyecto.ajustes.estilo === 'papel';
+  let previo: { clave: string; px: Buffer } | undefined;
   try {
     for (let i = 0; i < total; i++) {
       const t = (primero + i) / esc.fps;
-      const px = pixelesCuadro(esc, t, entorno, undefined, lienzo);
+      const clave = escalonado ? `${tiempoEstilo(esc, t).t}|${escenaEn(esc, t)?.escena.id}|${fraseEn(esc, t)?.inicio}` : '';
+      const px = escalonado && previo?.clave === clave ? previo.px : pixelesCuadro(esc, t, entorno, undefined, lienzo);
+      if (escalonado) previo = { clave, px };
       if (!ff.stdin.write(px)) await new Promise<void>((r) => ff.stdin.once('drain', () => r()));
       op.progreso?.(i + 1, total);
     }

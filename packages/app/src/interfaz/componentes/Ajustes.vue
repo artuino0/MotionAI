@@ -18,6 +18,15 @@ const cajaErrores = ref<HTMLDivElement>();
 const CATALOGO = ['Nunito', 'Montserrat', 'Poppins', 'Bebas Neue', 'Playfair Display', 'Caveat', 'Space Grotesk'];
 const familias = computed(() => [...new Set([...e.proyecto!.fuentes.map((f) => f.familia), ...CATALOGO])]);
 const PESOS = [400, 700, 800, 900] as const;
+const ESTILOS = ['plano', 'papel'] as const;
+// La tarjeta del subtítulo es opcional: la casilla la crea o la quita.
+const tarjeta = computed({
+  get: () => !!a.value.subtitulos.fondo,
+  set: (v: boolean) => {
+    if (v) a.value.subtitulos.fondo = { color: '#FFFBF3', margen: 28, radio: 14 };
+    else delete a.value.subtitulos.fondo;
+  },
+});
 const CALIDADES = [
   { id: 'alta', crf: 18 },
   { id: 'equilibrada', crf: 23 },
@@ -119,6 +128,17 @@ onMounted(() => nextTick(() => dialogo.value?.querySelector<HTMLElement>('select
         </fieldset>
 
         <fieldset>
+          <legend>{{ t('aj.estilo') }}</legend>
+          <label class="ancho">{{ t('aj.estiloDibujo') }}
+            <select v-model="a.estilo">
+              <option v-for="x in ESTILOS" :key="x" :value="x">{{ t(`aj.estilo.${x}` as const) }}</option>
+            </select>
+          </label>
+          <p class="tenue ancho nota">{{ t(`aj.estiloNota.${a.estilo}` as const) }}</p>
+          <label v-if="a.estilo === 'papel'">{{ t('aj.fpsEstilo') }} <input v-model.number="a.fpsEstilo" type="number" min="1" max="60" /></label>
+        </fieldset>
+
+        <fieldset>
           <legend>{{ t('aj.tiempo') }}</legend>
           <label>{{ t('aj.fps') }}
             <select v-model.number="a.fps">
@@ -152,8 +172,12 @@ onMounted(() => nextTick(() => dialogo.value?.querySelector<HTMLElement>('select
               <input v-model.number="a.subtitulos.posicion" type="range" min="0.1" max="0.95" step="0.01" />
             </label>
             <label>{{ t('aj.subColor') }} <input v-model="a.subtitulos.color" type="color" /></label>
-            <label>{{ t('aj.subContorno') }} <input v-model="a.subtitulos.contorno.color" type="color" /></label>
-            <label>{{ t('aj.subGrosor') }} <input v-model.number="a.subtitulos.contorno.ancho" type="number" min="0" max="30" /></label>
+            <label class="casilla ancho"><input v-model="tarjeta" type="checkbox" /> {{ t('aj.subTarjeta') }}</label>
+            <label v-if="a.subtitulos.fondo">{{ t('aj.subTarjetaColor') }} <input v-model="a.subtitulos.fondo.color" type="color" /></label>
+            <template v-else>
+              <label>{{ t('aj.subContorno') }} <input v-model="a.subtitulos.contorno.color" type="color" /></label>
+              <label>{{ t('aj.subGrosor') }} <input v-model.number="a.subtitulos.contorno.ancho" type="number" min="0" max="30" /></label>
+            </template>
           </template>
         </fieldset>
 
@@ -182,7 +206,6 @@ onMounted(() => nextTick(() => dialogo.value?.querySelector<HTMLElement>('select
               <label>{{ t('aj.crf') }} <input v-model.number="a.exportar.calidad" type="number" min="0" max="51" /></label>
               <label>{{ t('aj.carpeta') }} <input v-model="a.exportar.carpeta" /></label>
               <label>{{ t('aj.archivo') }} <input v-model="a.exportar.nombreArchivo" :placeholder="t('aj.archivoEjemplo')" /></label>
-              <label>{{ t('aj.fpsEstilo') }} <input v-model.number="a.fpsEstilo" type="number" min="1" max="60" /></label>
             </div>
           </details>
         </fieldset>

@@ -39,5 +39,11 @@ export async function cargarRecursosNavegador(proyecto: Proyecto, base: string):
     ),
   );
 
-  return { entorno: { imagen: (a) => cargadas.get(a) }, faltantes };
+  const lienzo = (ancho: number, alto: number) => {
+    const c = document.createElement('canvas');
+    c.width = ancho;
+    c.height = alto;
+    return c;
+  };
+  return { entorno: { imagen: (a) => cargadas.get(a), lienzo }, faltantes };
 }
