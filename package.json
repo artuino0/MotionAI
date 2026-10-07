@@ -12,7 +12,8 @@
     "fase2": "tsx herramientas/prueba-fase2.ts",
     "mcp": "node --disable-warning=ExperimentalWarning --import tsx packages/mcp/src/servidor.ts",
     "app": "pnpm --filter @motionai/app dev",
-    "fase3": "tsx herramientas/prueba-fase3.ts"
+    "fase3": "tsx herramientas/prueba-fase3.ts",
+    "fase4": "tsx herramientas/prueba-fase4.ts"
   },
   "devDependencies": {
     "@motionai/documento": "workspace:*",
