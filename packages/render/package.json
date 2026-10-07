@@ -1,0 +1,13 @@
+{
+  "name": "@motionai/render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "bin": { "motionai": "./src/cli.ts" },
+  "dependencies": {
+    "@motionai/documento": "workspace:*",
+    "@motionai/motor": "workspace:*",
+    "skia-canvas": "^3.0.0"
+  }
+}

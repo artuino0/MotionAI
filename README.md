@@ -2,4 +2,41 @@
 
 App de escritorio para hacer motion graphics pidiéndoselos a Claude en un chat. La app pone el lienzo, el motor de render y las herramientas (MCP); la inteligencia la pone el Claude Code del usuario, con su propia suscripción.
 
-El plan del producto está en [docs/PLAN.md](docs/PLAN.md). Ese plan, el esquema del documento y el contrato de las herramientas son la fuente de la verdad.
+- [Plan del producto](docs/PLAN.md): ese plan, el esquema del documento y el contrato de las herramientas son la fuente de la verdad.
+- [El documento](docs/documento.md): formato de los proyectos.
+
+## Estado
+
+Fase 1 (motor y documento) lista: esquema del documento con ajustes de proyecto, motor de render con primitivas, keyframes y estilo plano, exportación a MP4 en Node y un visor en el navegador. Siguiente: fase 2, herramientas MCP.
+
+## Paquetes
+
+| Paquete | Qué hace |
+| --- | --- |
+| `packages/documento` | Esquema del proyecto (zod), ajustes, formatos, tiempos y zonas tapadas por plataforma |
+| `packages/motor` | Motor de render sobre Canvas 2D; corre igual en el navegador y en Node |
+| `packages/render` | Render en Node con skia-canvas, exportación a MP4 con ffmpeg y la línea de comandos |
+| `packages/visor` | Visor web para reproducir un proyecto (Vite) |
+
+## Requisitos
+
+Node 22, pnpm 10 y ffmpeg con libx264 (y libx265 para H.265).
+
+```bash
+pnpm install
+```
+
+## Comandos
+
+```bash
+pnpm motionai validar ejemplos/demo/proyecto.json
+pnpm motionai cuadro  ejemplos/demo/proyecto.json 2.5,6 --dir salida/cuadros [--formato 16:9]
+pnpm motionai render  ejemplos/demo/proyecto.json salida/demo.mp4 [--formato 16:9] [--desde 0 --hasta 3]
+
+pnpm visor        # abre http://localhost:5173/?proyecto=/ejemplos/demo/proyecto.json
+pnpm test         # pruebas unitarias
+pnpm typecheck
+pnpm paridad      # prueba de cierre de la fase 1: navegador vs Node vs MP4, en 9:16 y 16:9
+```
+
+`pnpm paridad` necesita Chromium: usa `/opt/pw-browsers/chromium` si existe, la variable `CHROMIUM`, o el que instala `pnpm exec playwright-core install chromium`. Deja el reporte y las imágenes de diferencias en `salida/paridad/`.

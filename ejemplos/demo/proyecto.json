@@ -1,0 +1,373 @@
+{
+  "formato": "motionai",
+  "version": 1,
+  "nombre": "Demo MotionAI",
+  "ajustes": {
+    "formato": "9:16",
+    "fps": 30,
+    "duracion": 9.5,
+    "plataformas": ["tiktok", "reels"],
+    "fondo": "#FFF4E6",
+    "subtitulos": { "posicion": 0.76, "tamano": 60 },
+    "exportar": { "carpeta": "exportados", "nombreArchivo": "demo" }
+  },
+  "fuentes": [
+    { "familia": "Nunito", "archivo": "recursos/fuentes/Nunito_400Regular.ttf", "peso": 400 },
+    { "familia": "Nunito", "archivo": "recursos/fuentes/Nunito_700Bold.ttf", "peso": 700 },
+    { "familia": "Nunito", "archivo": "recursos/fuentes/Nunito_900Black.ttf", "peso": 900 }
+  ],
+  "frases": [
+    { "inicio": 0.4, "fin": 2.9, "texto": "Pídele a Claude un video." },
+    { "inicio": 3.2, "fin": 6.3, "texto": "Diseña las piezas y las anima por ti." },
+    { "inicio": 6.8, "fin": 9.2, "texto": "Tu video, en un mensaje.", "subtitulo": false }
+  ],
+  "biblioteca": [
+    {
+      "id": "tarjeta",
+      "nombre": "Tarjeta con palomita",
+      "tipo": "tarjeta",
+      "nota": "Entra deslizando; la palomita se dibuja medio segundo después",
+      "raiz": {
+        "id": "tarjeta-raiz",
+        "tipo": "grupo",
+        "ancho": 640,
+        "alto": 180,
+        "hijos": [
+          {
+            "id": "tarjeta-fondo",
+            "tipo": "rect",
+            "ancho": 640,
+            "alto": 180,
+            "radio": 36,
+            "relleno": "#FFFFFF",
+            "sombra": { "color": "#1E3A3426", "desenfoque": 30, "y": 12 }
+          },
+          {
+            "id": "icono",
+            "tipo": "elipse",
+            "x": 30,
+            "y": 30,
+            "ancho": 120,
+            "alto": 120,
+            "relleno": "#2BB673"
+          },
+          {
+            "id": "palomita",
+            "tipo": "trazo",
+            "d": "M 62 92 L 84 114 L 120 70",
+            "contorno": { "color": "#FFFFFF", "ancho": 14, "extremo": "redondo", "union": "redonda" },
+            "animacion": {
+              "entra": { "tipo": "dibuja", "en": 0.45, "dur": 0.4 }
+            }
+          },
+          {
+            "id": "etiqueta",
+            "tipo": "texto",
+            "texto": "Pieza",
+            "fuente": "Nunito",
+            "peso": 800,
+            "tamano": 54,
+            "relleno": "#2B2B2B",
+            "x": 186,
+            "y": 90,
+            "ancla": "izq"
+          }
+        ]
+      }
+    },
+    {
+      "id": "destello",
+      "nombre": "Destello",
+      "tipo": "decoracion",
+      "nota": "Estrella de cuatro puntas; gira despacio",
+      "raiz": {
+        "id": "destello-forma",
+        "tipo": "trazo",
+        "d": "M 0 -60 L 14 -14 L 60 0 L 14 14 L 0 60 L -14 14 L -60 0 L -14 -14 Z",
+        "relleno": "#EDB43E"
+      }
+    }
+  ],
+  "escenas": [
+    {
+      "id": "e1",
+      "nombre": "Escena 1 · Pídelo",
+      "inicio": 0,
+      "fin": 3,
+      "fondo": "#FFF4E6",
+      "hijos": [
+        {
+          "id": "mancha",
+          "tipo": "elipse",
+          "x": "50%",
+          "y": "50%",
+          "ancla": "centro",
+          "ancho": 620,
+          "alto": 620,
+          "relleno": "#FFD9CF",
+          "animacion": {
+            "entra": { "tipo": "crece", "en": 0, "dur": 0.6 },
+            "ciclos": [{ "tipo": "late", "amplitud": 0.04, "periodo": 1.6 }]
+          }
+        },
+        {
+          "id": "destello-1",
+          "tipo": "instancia",
+          "componente": "destello",
+          "x": "22%",
+          "y": "36%",
+          "animacion": {
+            "entra": { "tipo": "pop", "en": 0.3 },
+            "ciclos": [{ "tipo": "gira", "periodo": 8 }]
+          }
+        },
+        {
+          "id": "destello-2",
+          "tipo": "instancia",
+          "componente": "destello",
+          "x": "80%",
+          "y": "62%",
+          "escala": 0.6,
+          "cambios": {
+            "destello-forma": { "relleno": "#FF7A66" }
+          },
+          "animacion": {
+            "entra": { "tipo": "pop", "en": 0.5 },
+            "ciclos": [{ "tipo": "gira", "amplitud": -360, "periodo": 6 }]
+          }
+        },
+        {
+          "id": "burbuja",
+          "tipo": "grupo",
+          "x": "50%",
+          "y": "38%",
+          "ancla": "centro",
+          "ancho": 420,
+          "alto": 150,
+          "animacion": {
+            "entra": { "tipo": "pop", "en": 0.2 },
+            "ciclos": [{ "tipo": "flota", "amplitud": 10, "periodo": 2.2 }]
+          },
+          "hijos": [
+            {
+              "id": "burbuja-forma",
+              "tipo": "trazo",
+              "d": "M 40 0 L 380 0 Q 420 0 420 40 L 420 100 Q 420 140 380 140 L 120 140 L 70 180 L 80 140 L 40 140 Q 0 140 0 100 L 0 40 Q 0 0 40 0 Z",
+              "relleno": "#006E84"
+            },
+            {
+              "id": "burbuja-texto",
+              "tipo": "texto",
+              "texto": "Hazme un video",
+              "fuente": "Nunito",
+              "peso": 800,
+              "tamano": 50,
+              "relleno": "#FFFFFF",
+              "x": 210,
+              "y": 70,
+              "ancla": "centro",
+              "animacion": {
+                "entra": { "tipo": "escribe", "en": 0.6 }
+              }
+            }
+          ]
+        },
+        {
+          "id": "titulo-1",
+          "tipo": "texto",
+          "texto": "Motion graphics\ncon un chat",
+          "fuente": "Nunito",
+          "peso": 900,
+          "tamano": 104,
+          "interlineado": 1.1,
+          "alineacion": "centro",
+          "relleno": "#2B2B2B",
+          "x": "50%",
+          "y": "57%",
+          "ancla": "centro",
+          "animacion": {
+            "entra": { "tipo": "sube", "en": 1.3 },
+            "sale": { "tipo": "desaparece", "en": 2.75, "dur": 0.25 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "nombre": "Escena 2 · Piezas",
+      "inicio": 3,
+      "fin": 6.5,
+      "fondo": "#DFF5EC",
+      "hijos": [
+        {
+          "id": "titulo-2",
+          "tipo": "texto",
+          "texto": "Claude arma las piezas",
+          "fuente": "Nunito",
+          "peso": 900,
+          "tamano": 72,
+          "relleno": "#1E3A34",
+          "x": "50%",
+          "y": "13%",
+          "ancla": "centro",
+          "animacion": {
+            "entra": { "tipo": "cae", "en": "escena" }
+          }
+        },
+        {
+          "id": "tarjeta-1",
+          "tipo": "instancia",
+          "componente": "tarjeta",
+          "x": "50%",
+          "y": "27%",
+          "ancla": "centro",
+          "cambios": {
+            "etiqueta": { "texto": "Formas y textos" }
+          },
+          "animacion": {
+            "entra": { "tipo": "desliza-izq", "en": "f2+0.2" }
+          },
+          "escala": 0.9
+        },
+        {
+          "id": "tarjeta-2",
+          "tipo": "instancia",
+          "componente": "tarjeta",
+          "x": "50%",
+          "y": "44%",
+          "ancla": "centro",
+          "cambios": {
+            "etiqueta": { "texto": "Keyframes" },
+            "icono": { "relleno": "#EDB43E" }
+          },
+          "animacion": {
+            "entra": { "tipo": "desliza-der", "en": "f2+0.6" }
+          },
+          "escala": 0.9
+        },
+        {
+          "id": "tarjeta-3",
+          "tipo": "instancia",
+          "componente": "tarjeta",
+          "x": "50%",
+          "y": "61%",
+          "ancla": "centro",
+          "cambios": {
+            "etiqueta": { "texto": "Escenas" },
+            "icono": { "relleno": "#FF7A66" }
+          },
+          "animacion": {
+            "entra": { "tipo": "desliza-izq", "en": "f2+1.0" },
+            "pistas": {
+              "rotacion": [{ "t": 5.2, "v": 0 }, { "t": 5.5, "v": -4, "curva": "salida" }, { "t": 5.9, "v": 0, "curva": "rebote" }]
+            }
+          },
+          "escala": 0.9
+        }
+      ]
+    },
+    {
+      "id": "e3",
+      "nombre": "Escena 3 · Cierre",
+      "inicio": 6.5,
+      "fin": 9.5,
+      "fondo": {
+        "tipo": "lineal",
+        "de": [0, 0],
+        "a": [0, 1920],
+        "paradas": [[0, "#0B5563"], [1, "#062F38"]]
+      },
+      "hijos": [
+        {
+          "id": "logo",
+          "tipo": "grupo",
+          "x": "50%",
+          "y": "38%",
+          "ancla": "centro",
+          "ancho": 260,
+          "alto": 260,
+          "animacion": {
+            "entra": { "tipo": "pop", "en": "escena+0.1", "dur": 0.5 },
+            "pistas": {
+              "rotacion": [{ "t": 6.6, "v": -20 }, { "t": 7.1, "v": 0, "curva": "rebote" }]
+            },
+            "ciclos": [{ "tipo": "late", "amplitud": 0.03, "periodo": 1.4, "desde": 7.6 }]
+          },
+          "hijos": [
+            { "id": "logo-fondo", "tipo": "rect", "ancho": 260, "alto": 260, "radio": 68, "relleno": "#FF7A66" },
+            {
+              "id": "logo-m",
+              "tipo": "trazo",
+              "d": "M 70 190 L 70 78 L 130 150 L 190 78 L 190 190",
+              "contorno": { "color": "#FFFFFF", "ancho": 28, "extremo": "redondo", "union": "redonda" },
+              "animacion": {
+                "entra": { "tipo": "dibuja", "en": 6.9, "dur": 0.7 }
+              }
+            }
+          ]
+        },
+        {
+          "id": "marca",
+          "tipo": "texto",
+          "texto": "MotionAI",
+          "fuente": "Nunito",
+          "peso": 900,
+          "tamano": 120,
+          "relleno": "#FFFFFF",
+          "x": "50%",
+          "y": "57%",
+          "ancla": "centro",
+          "animacion": {
+            "entra": { "tipo": "sube", "en": 7.3 }
+          }
+        },
+        {
+          "id": "letrero",
+          "tipo": "grupo",
+          "x": "50%",
+          "y": "72%",
+          "ancla": "centro",
+          "ancho": 720,
+          "alto": 110,
+          "rotacion": -2,
+          "animacion": {
+            "entra": { "tipo": "desliza-der", "en": "f3+0.9" },
+            "sale": { "tipo": "pop", "en": 9.1 }
+          },
+          "hijos": [
+            {
+              "id": "letrero-fondo",
+              "tipo": "rect",
+              "ancho": 720,
+              "alto": 110,
+              "radio": 55,
+              "relleno": "#FF7A66",
+              "animacion": {
+                "pistas": {
+                  "relleno": [{ "t": 8.4, "v": "#FF7A66" }, { "t": 8.8, "v": "#EDB43E" }]
+                }
+              }
+            },
+            {
+              "id": "letrero-texto",
+              "tipo": "texto",
+              "texto": "Tu video, en un mensaje",
+              "fuente": "Nunito",
+              "peso": 800,
+              "tamano": 52,
+              "relleno": "#FFFFFF",
+              "x": 360,
+              "y": 55,
+              "ancla": "centro",
+              "animacion": {
+                "pistas": {
+                  "relleno": [{ "t": 8.4, "v": "#FFFFFF" }, { "t": 8.8, "v": "#2B2B2B" }]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

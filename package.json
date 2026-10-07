@@ -1,0 +1,25 @@
+{
+  "name": "motionai",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "visor": "pnpm --filter @motionai/visor dev",
+    "motionai": "tsx packages/render/src/cli.ts",
+    "paridad": "tsx herramientas/paridad.ts"
+  },
+  "devDependencies": {
+    "@motionai/documento": "workspace:*",
+    "@motionai/motor": "workspace:*",
+    "@motionai/render": "workspace:*",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
+    "playwright-core": "^1.56.0",
+    "skia-canvas": "^3.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

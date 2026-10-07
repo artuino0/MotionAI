@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MotionAI · Visor</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root { color-scheme: dark; --fondo: #16181c; --panel: #202329; --borde: #30343c; --texto: #e8e8ea; --tenue: #9a9ea8; --acento: #ff7a66; }
+      * { box-sizing: border-box; }
+      body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr auto; background: var(--fondo); color: var(--texto); font: 14px/1.4 system-ui, sans-serif; }
+      header, footer { display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: var(--panel); border-color: var(--borde); border-style: solid; border-width: 0 0 1px; flex-wrap: wrap; }
+      footer { border-width: 1px 0 0; }
+      header h1 { font-size: 15px; margin: 0 auto 0 0; font-weight: 600; }
+      label { display: flex; gap: 6px; align-items: center; color: var(--tenue); }
+      select, button { background: var(--fondo); color: var(--texto); border: 1px solid var(--borde); border-radius: 6px; padding: 5px 10px; font: inherit; }
+      button { min-width: 84px; cursor: pointer; }
+      main { display: grid; place-items: center; overflow: hidden; padding: 16px; min-height: 0; }
+      canvas { box-shadow: 0 6px 30px #0008; background: #000; }
+      input[type=range] { flex: 1; min-width: 160px; accent-color: var(--acento); }
+      .tiempo { font-variant-numeric: tabular-nums; color: var(--tenue); min-width: 120px; }
+      .error { color: #ff8f8f; white-space: pre-wrap; padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 id="titulo">MotionAI</h1>
+      <label>Formato <select id="formato"></select></label>
+      <label><input type="checkbox" id="zonas" /> Zonas tapadas</label>
+      <label><input type="checkbox" id="subtitulos" checked /> Subtítulos</label>
+    </header>
+    <main><canvas id="lienzo"></canvas></main>
+    <footer>
+      <button id="play">▶ Play</button>
+      <input type="range" id="barra" min="0" value="0" step="1" />
+      <span class="tiempo" id="tiempo">0.00 / 0.00</span>
+      <span class="tiempo" id="escena"></span>
+    </footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

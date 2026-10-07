@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Instalar ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Instalar Chromium
+        run: pnpm exec playwright-core install --with-deps chromium
+      - name: Paridad navegador · Node · MP4
+        run: pnpm paridad
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paridad
+          path: |
+            salida/paridad/reporte.md
+            salida/paridad/*.png
+          if-no-files-found: ignore
